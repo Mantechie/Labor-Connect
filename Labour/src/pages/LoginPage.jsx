@@ -1,24 +1,46 @@
 // src/pages/LoginPage.jsx
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
+import authService from '../services/authService';
 
 const LoginPage = () => {
   const navigate = useNavigate();
   const [credentials, setCredentials] = useState({ email: '', password: '' });
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleInputChange = (e) => {
     setCredentials({ ...credentials, [e.target.name]: e.target.value });
+    setError(''); // Clear error when user types
   };
 
-  const handleLogin = (e) => {
+  const handleLogin = async (e) => {
     e.preventDefault();
+    setLoading(true);
+    setError('');
 
-    // Dummy check – replace with API call later
-    if (credentials.email && credentials.password) {
-      alert('Login successful! Redirecting...');
-      navigate('/');
-    } else {
-      alert('Please enter email and password');
+    try {
+      if (!credentials.email || !credentials.password) {
+        setError('Please enter both email and password');
+        return;
+      }
+
+      const response = await authService.login(credentials.email, credentials.password);
+      
+      if (response.user) {
+        // Redirect based on user role
+        if (response.user.role === 'laborer') {
+          navigate('/laborer/dashboard');
+        } else if (response.user.role === 'admin') {
+          navigate('/admin/dashboard');
+        } else {
+          navigate('/');
+        }
+      }
+    } catch (error) {
+      setError(error.message || 'Login failed. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -26,6 +48,12 @@ const LoginPage = () => {
     <div className="container d-flex justify-content-center align-items-center" style={{ height: '85vh' }}>
       <div className="card shadow p-4" style={{ width: '100%', maxWidth: 400 }}>
         <h3 className="text-center mb-3">Login</h3>
+        {error && (
+          <div className="alert alert-danger" role="alert">
+            {error}
+          </div>
+        )}
+        
         <form onSubmit={handleLogin}>
           <div className="mb-3">
             <label htmlFor="email" className="form-label">Email or Phone</label>
@@ -38,6 +66,7 @@ const LoginPage = () => {
               value={credentials.email}
               onChange={handleInputChange}
               autoComplete="username"
+              disabled={loading}
             />
           </div>
           <div className="mb-3">
@@ -51,10 +80,17 @@ const LoginPage = () => {
               value={credentials.password}
               onChange={handleInputChange}
               autoComplete="current-password"
+              disabled={loading}
             />
           </div>
           <div className="d-grid">
-            <button type="submit" className="btn btn-primary">Login</button>
+            <button 
+              type="submit" 
+              className="btn btn-primary"
+              disabled={loading}
+            >
+              {loading ? 'Logging in...' : 'Login'}
+            </button>
           </div>
         </form>
 

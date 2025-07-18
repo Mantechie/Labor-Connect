@@ -117,3 +117,132 @@ export const getAllReviews = async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch reviews', error: error.message })
   }
 }
+
+// @desc    Get admin dashboard analytics
+// @route   GET /api/admin/analytics
+// @access  Private (Admin only)
+export const getAnalytics = async (req, res) => {
+  try {
+    // Basic counts
+    const totalUsers = await User.countDocuments()
+    const totalJobs = await Job.countDocuments()
+    const totalLaborers = await User.countDocuments({ role: 'laborer' })
+    const totalReviews = await Review.countDocuments()
+    const totalChats = await Chat.countDocuments()
+
+    // User growth (last 30 days)
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+    const newUsersThisMonth = await User.countDocuments({
+      createdAt: { $gte: thirtyDaysAgo }
+    })
+
+    // Job statistics
+    const openJobs = await Job.countDocuments({ status: 'open' })
+    const completedJobs = await Job.countDocuments({ status: 'completed' })
+    const inProgressJobs = await Job.countDocuments({ status: 'in progress' })
+
+    // Laborer statistics
+    const availableLaborers = await User.countDocuments({ 
+      role: 'laborer', 
+      isAvailable: true 
+    })
+    const approvedLaborers = await User.countDocuments({ 
+      role: 'laborer', 
+      isApproved: true 
+    })
+
+    // Revenue estimation (based on completed jobs)
+    const completedJobsData = await Job.find({ status: 'completed' })
+    const totalRevenue = completedJobsData.reduce((sum, job) => sum + (job.budget || 0), 0)
+
+    // Category distribution
+    const categoryStats = await Job.aggregate([
+      {
+        $group: {
+          _id: '$category',
+          count: { $sum: 1 },
+          totalBudget: { $sum: '$budget' }
+        }
+      },
+      { $sort: { count: -1 } }
+    ])
+
+    // Monthly job trends (last 6 months)
+    const sixMonthsAgo = new Date(Date.now() - 6 * 30 * 24 * 60 * 60 * 1000)
+    const monthlyJobTrends = await Job.aggregate([
+      {
+        $match: {
+          createdAt: { $gte: sixMonthsAgo }
+        }
+      },
+      {
+        $group: {
+          _id: {
+            year: { $year: '$createdAt' },
+            month: { $month: '$createdAt' }
+          },
+          count: { $sum: 1 },
+          totalBudget: { $sum: '$budget' }
+        }
+      },
+      { $sort: { '_id.year': 1, '_id.month': 1 } }
+    ])
+
+    // Top rated laborers
+    const topLaborers = await User.find({ 
+      role: 'laborer', 
+      rating: { $gt: 0 } 
+    })
+    .sort({ rating: -1 })
+    .limit(10)
+    .select('name rating numReviews specialization')
+
+    // Recent activity
+    const recentJobs = await Job.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .populate('postedBy', 'name email')
+
+    const recentUsers = await User.find()
+      .sort({ createdAt: -1 })
+      .limit(5)
+      .select('name email role createdAt')
+
+    res.status(200).json({
+      overview: {
+        totalUsers,
+        totalJobs,
+        totalLaborers,
+        totalReviews,
+        totalChats,
+        newUsersThisMonth,
+        totalRevenue: Math.round(totalRevenue)
+      },
+      jobs: {
+        open: openJobs,
+        completed: completedJobs,
+        inProgress: inProgressJobs,
+        completionRate: totalJobs > 0 ? Math.round((completedJobs / totalJobs) * 100) : 0
+      },
+      laborers: {
+        total: totalLaborers,
+        available: availableLaborers,
+        approved: approvedLaborers,
+        approvalRate: totalLaborers > 0 ? Math.round((approvedLaborers / totalLaborers) * 100) : 0
+      },
+      categories: categoryStats,
+      trends: {
+        monthlyJobs: monthlyJobTrends
+      },
+      topPerformers: {
+        laborers: topLaborers
+      },
+      recentActivity: {
+        jobs: recentJobs,
+        users: recentUsers
+      }
+    })
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching analytics', error: error.message })
+  }
+}

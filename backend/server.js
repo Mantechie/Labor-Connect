@@ -1,9 +1,14 @@
 import express from 'express'
-import dotenv from 'dotenv'
 import cors from 'cors'
 import morgan from 'morgan'
+import { createServer } from 'http'
 import connectDB from './config/db.js'
+import config from './config/env.js'
+import { initializeSocket } from './sockets/chatSocket.js'
+import authRoutes from './routes/authRoutes.js'
 import userRoutes from './routes/userRoutes.js'
+import laborerRoutes from './routes/laborerRoutes.js'
+import jobRoutes from './routes/jobRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
 import reviewRoutes from './routes/reviewRoutes.js'
 import chatRoutes from './routes/chatRoutes.js'
@@ -12,26 +17,35 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 
 
-// Load environment variables
-dotenv.config()
-
 // Connect to MongoDB
 connectDB()
 
 const app = express()
+const server = createServer(app)
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = path.dirname(__filename)
+
+// Initialize Socket.IO
+initializeSocket(server)
 
 app.set('view engine', 'ejs')
 app.set('views', path.join(__dirname, 'views'))
 
 // Middleware
 app.use(express.json()) // For JSON body parsing
-app.use(cors())
+app.use(cors({
+  origin: config.CORS_ORIGIN,
+  credentials: true,
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization']
+}))
 app.use(morgan('dev'))
 
 // API Routes
+app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
+app.use('/api/laborers', laborerRoutes)
+app.use('/api/jobs', jobRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/reviews', reviewRoutes)
 app.use('/api/chats', chatRoutes)
@@ -76,8 +90,9 @@ app.use(notFound)
 app.use(errorHandler)
 
 // Server Start
-const PORT = process.env.PORT || 8080
-
-app.listen(PORT, () => {
-  console.log(`🚀 Server running in ${process.env.NODE_ENV} mode on port ${PORT}`)
+server.listen(config.PORT, () => {
+  console.log(`🚀 Server running in ${config.NODE_ENV} mode on port ${config.PORT}`)
+  console.log(`📧 Email configured: ${config.EMAIL_USER ? 'Yes' : 'No'}`)
+  console.log(`📱 SMS configured: ${config.TWILIO_ACCOUNT_SID ? 'Yes' : 'No'}`)
+  console.log(`🔌 WebSocket enabled for real-time chat`)
 })

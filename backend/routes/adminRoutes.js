@@ -6,6 +6,7 @@ import {
   approveLaborer,
   getAllChats,
   getAllReviews,
+  getAnalytics,
 } from '../controllers/adminController.js'
 
 import { protect, isAdmin } from '../middlewares/authMiddleware.js'
@@ -29,5 +30,8 @@ router.get('/chats', protect, isAdmin, getAllChats)
 
 // 📌 GET /api/admin/reviews - View all reviews
 router.get('/reviews', protect, isAdmin, getAllReviews)
+
+// 📌 GET /api/admin/analytics - Get dashboard analytics
+router.get('/analytics', protect, isAdmin, getAnalytics)
 
 export default router

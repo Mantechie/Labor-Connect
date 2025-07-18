@@ -2,8 +2,8 @@ import bcrypt from 'bcryptjs' // PAssword hashing library
 import jwt from 'jsonwebtoken' // Generating JWT tokens
 import User from '../models/User.js' // User model
 import OTP from '../models/OTP.js' // OTP model
-import { generateOTP } from '../utils/generateOTP.js' // Generate OTP
-import { sendEmail } from '../utils/sendEmail.js' // Or use sendSMS
+import generateOTP from '../utils/generateOTP.js' // Generate OTP
+import sendEmail from '../utils/sendEmail.js' // Or use sendSMS
 
 import dotenv from 'dotenv' //Loads env variables (JWT_SECRET)
  
@@ -116,7 +116,12 @@ export const sendOtp = async (req, res) => {
   await newOtp.save()
 
   // Send OTP via Email 
-  await sendEmail(email, `Your OTP is ${otp}`)
+  await sendEmail({
+    to: email,
+    subject: 'Labor Connect - OTP Verification',
+    text: `Your OTP is ${otp}`,
+    html: `<h2>Your OTP is: <strong>${otp}</strong></h2>`
+  })
 
   res.status(200).json({ message: 'OTP sent to your email' })
 }
