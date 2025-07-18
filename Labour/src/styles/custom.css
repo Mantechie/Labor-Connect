@@ -1,0 +1,115 @@
+/* Custom Bootstrap Theme for Labour Connect */
+
+:root {
+  --bs-primary: #0D47A1; /* Deep Blue */
+  --bs-secondary: #FF9933; /* Saffron */
+  --bs-success: #43a047;
+  --bs-warning: #ffb300;
+  --bs-danger: #e53935;
+  --bs-light: #f8f6f2; /* Neutral beige */
+  --bs-dark: #22223b;
+  --bs-body-font-family: 'Poppins', Arial, sans-serif;
+}
+
+body {
+  font-family: var(--bs-body-font-family);
+  background-color: var(--bs-light);
+  color: var(--bs-dark);
+}
+
+.card, .modal-content, .dropdown-menu {
+  border-radius: 1.25rem !important; /* rounded-3 */
+  box-shadow: 0 4px 24px rgba(13, 71, 161, 0.08), 0 1.5px 6px rgba(0,0,0,0.04);
+}
+
+.btn-primary {
+  background-color: var(--bs-primary) !important;
+  border-color: var(--bs-primary) !important;
+  color: #fff !important;
+  font-weight: 600;
+  border-radius: 2rem;
+  padding: 0.5rem 1.5rem;
+  box-shadow: 0 2px 8px rgba(13, 71, 161, 0.10);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.btn-primary:hover, .btn-primary:focus {
+  background-color: #1565c0 !important;
+  box-shadow: 0 4px 16px rgba(13, 71, 161, 0.18);
+}
+
+.btn-outline-success {
+  border-radius: 2rem;
+  font-weight: 600;
+}
+
+.navbar {
+  background: #fff;
+  box-shadow: 0 2px 12px rgba(13, 71, 161, 0.06);
+}
+
+.nav-link.active, .nav-link:focus {
+  color: var(--bs-secondary) !important;
+  font-weight: 600;
+}
+
+.rounded-xl {
+  border-radius: 1.25rem !important;
+}
+.rounded-2xl {
+  border-radius: 2rem !important;
+}
+.shadow-lg {
+  box-shadow: 0 4px 24px rgba(13, 71, 161, 0.12), 0 1.5px 6px rgba(0,0,0,0.04) !important;
+}
+
+/* Hero Section */
+.hero-section {
+  background: linear-gradient(90deg, #FF9933 0%, #fff 100%);
+  padding: 3rem 0 2rem 0;
+  border-radius: 0 0 2rem 2rem;
+  box-shadow: 0 4px 24px rgba(13, 71, 161, 0.08);
+}
+
+/* Category Cards */
+.category-card {
+  background: #fff;
+  border-radius: 1.25rem;
+  box-shadow: 0 2px 12px rgba(13, 71, 161, 0.06);
+  padding: 1.5rem 1rem;
+  text-align: center;
+  transition: box-shadow 0.2s;
+}
+.category-card:hover {
+  box-shadow: 0 6px 24px rgba(255, 153, 51, 0.12);
+}
+
+/* Testimonial Section */
+.testimonial {
+  background: #fff;
+  border-radius: 1.25rem;
+  box-shadow: 0 2px 12px rgba(255, 153, 51, 0.10);
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+/* Trust Badges */
+.trust-badge {
+  background: #0D47A1;
+  color: #fff;
+  border-radius: 2rem;
+  padding: 0.25rem 1rem;
+  font-size: 0.95rem;
+  margin-right: 0.5rem;
+  display: inline-block;
+}
+
+/* Responsive tweaks */
+@media (max-width: 576px) {
+  .hero-section {
+    padding: 2rem 0 1rem 0;
+    border-radius: 0 0 1rem 1rem;
+  }
+  .category-card {
+    padding: 1rem 0.5rem;
+  }
+} 

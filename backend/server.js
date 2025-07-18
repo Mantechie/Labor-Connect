@@ -12,9 +12,12 @@ import jobRoutes from './routes/jobRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
 import reviewRoutes from './routes/reviewRoutes.js'
 import chatRoutes from './routes/chatRoutes.js'
+import categoryRoutes from './routes/categoryRoutes.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
+import reportRoutes from './routes/reportRoutes.js';
+import jobApplicationRoutes from './routes/jobApplicationRoutes.js';
 
 
 // Connect to MongoDB
@@ -49,6 +52,9 @@ app.use('/api/jobs', jobRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/reviews', reviewRoutes)
 app.use('/api/chats', chatRoutes)
+app.use('/api/categories', categoryRoutes);
+app.use('/api/support', reportRoutes);
+app.use('/api/applications', jobApplicationRoutes);
 
 // Health Check
 app.get('/', (req, res) => {

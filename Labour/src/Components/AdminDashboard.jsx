@@ -1,7 +1,11 @@
 // src/components/AdminDashboard.jsx
 // Using bootstrap for styling 
 // import react module & useState hook which add state variable to component 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import authService from '../services/authService';
+import axiosInstance from '../utils/axiosInstance';
+import { useToast } from './ToastContext';
+import { useNavigate } from 'react-router-dom';
 
 // Array of object of  laborers with id,name,specialization,status
 const Laborers = [
@@ -18,28 +22,59 @@ const Logs = [
 
 //Admin Dashboard JS arrow function 
 const AdminDashboard = () => {
-  // useState for laborers
-  const [laborers, setLaborers] = useState(Laborers);
-  
-  //JS arrow function to Approve laborers by getting their id 
-  const handleApprove = (id) => {
-    // 1. Map through the `laborers` array
-    const updated = laborers.map((lab) =>
-      // 2. If the laborer's ID matches the provided `id`, update their status
-      lab.id === id ? { ...lab, status: 'Approved' } : lab
-    );
-     // 3. Update the state with the new array
-    setLaborers(updated);
+  const [applications, setApplications] = useState([]);
+  const [statusFilter, setStatusFilter] = useState('');
+  const [search, setSearch] = useState('');
+  const [loading, setLoading] = useState(false);
+  const { showToast } = useToast();
+  const navigate = useNavigate();
+
+  // Restrict to admin only
+  useEffect(() => {
+    const user = authService.getStoredUser();
+    if (!user || user.role !== 'admin') {
+      showToast('Access denied: Admins only', 'danger');
+      navigate('/login');
+    }
+  }, [navigate, showToast]);
+
+  // Fetch job applications
+  const fetchApplications = async () => {
+    setLoading(true);
+    try {
+      let url = '/applications';
+      const params = [];
+      if (statusFilter) params.push(`status=${statusFilter}`);
+      if (search) params.push(`search=${encodeURIComponent(search)}`);
+      if (params.length) url += '?' + params.join('&');
+      const res = await axiosInstance.get(url);
+      setApplications(res.data);
+    } catch {
+      showToast('Failed to fetch applications', 'danger');
+    } finally {
+      setLoading(false);
+    }
   };
-  
-   //JS arrow function to delete laborers by getting their id 
-  const handleDelete = (id) => {
-    // 1. Filter through the `laborers` array,if the laborer's ID doesn't matches the provided `id`
-    const updated = laborers.filter((lab) => lab.id !== id);
-    // 2. Update the state with the new array
-    setLaborers(updated);
+
+  useEffect(() => {
+    fetchApplications();
+    // eslint-disable-next-line
+  }, [statusFilter, search]);
+
+  // Approve/reject application
+  const handleStatusChange = async (id, action) => {
+    setLoading(true);
+    try {
+      await axiosInstance.patch(`/applications/${id}/${action}`);
+      showToast(`Application ${action}d`, 'success');
+      fetchApplications();
+    } catch {
+      showToast(`Failed to ${action} application`, 'danger');
+    } finally {
+      setLoading(false);
+    }
   };
-  
+
   return (
     // py-4 = 1.5rem/24px p-padding,m-margin bootstrap, using className instead of class since class is keyword in js
     <div className="container py-4">  
@@ -47,45 +82,55 @@ const AdminDashboard = () => {
 
       {/* Section 1: Laborer Approvals */}
       <div className="my-4">
-        <h4>Laborer Approvals</h4>
+        <h4>Job Applications</h4>
+        <div className="d-flex gap-2 mb-3">
+          <select className="form-select w-auto" value={statusFilter} onChange={e => setStatusFilter(e.target.value)}>
+            <option value="">All Statuses</option>
+            <option value="pending">Pending</option>
+            <option value="approved">Approved</option>
+            <option value="rejected">Rejected</option>
+          </select>
+          <input
+            type="text"
+            className="form-control w-auto"
+            placeholder="Search by job or applicant"
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            style={{ maxWidth: 220 }}
+          />
+          <button className="btn btn-outline-secondary" onClick={fetchApplications} disabled={loading}>Refresh</button>
+        </div>
         <table className="table table-striped">
           <thead>
             <tr>
-              <th>Name</th>
-              <th>Specialization</th>
+              <th>Job</th>
+              <th>Applicant</th>
+              <th>Message</th>
               <th>Status</th>
+              <th>Applied At</th>
               <th>Actions</th>
             </tr>
           </thead>
           <tbody>
-            {laborers.map((lab) => (
-              <tr key={lab.id}>
-                <td>{lab.name}</td>
-                <td>{lab.specialization}</td>
+            {applications.length === 0 && (
+              <tr><td colSpan={6} className="text-center">No applications found.</td></tr>
+            )}
+            {applications.map(app => (
+              <tr key={app._id}>
+                <td>{app.jobId?.title || '-'}</td>
+                <td>{app.applicantId?.name || '-'}</td>
+                <td>{app.message || '-'}</td>
                 <td>
-                  <span
-                    className={`badge ${
-                      lab.status === 'Approved' ? 'bg-success' : 'bg-warning text-dark'
-                    }`}
-                  >
-                    {lab.status}
-                  </span>
+                  <span className={`badge bg-${app.status === 'approved' ? 'success' : app.status === 'rejected' ? 'danger' : 'warning text-dark'}`}>{app.status}</span>
                 </td>
+                <td>{app.appliedAt ? new Date(app.appliedAt).toLocaleString() : '-'}</td>
                 <td>
-                  {lab.status === 'Pending' && (
-                    <button
-                      className="btn btn-sm btn-success me-2"
-                      onClick={() => handleApprove(lab.id)}
-                    >
-                      Approve
-                    </button>
+                  {app.status === 'pending' && (
+                    <>
+                      <button className="btn btn-sm btn-success me-2" onClick={() => handleStatusChange(app._id, 'approve')} disabled={loading}>Approve</button>
+                      <button className="btn btn-sm btn-danger" onClick={() => handleStatusChange(app._id, 'reject')} disabled={loading}>Reject</button>
+                    </>
                   )}
-                  <button
-                    className="btn btn-sm btn-danger"
-                    onClick={() => handleDelete(lab.id)}
-                  >
-                    Delete
-                  </button>
                 </td>
               </tr>
             ))}
