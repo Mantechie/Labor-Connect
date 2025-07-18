@@ -7,6 +7,9 @@ import userRoutes from './routes/userRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
 import reviewRoutes from './routes/reviewRoutes.js'
 import chatRoutes from './routes/chatRoutes.js'
+import authRoutes from './routes/authRoutes.js'
+import jobRoutes from './routes/jobRoutes.js'
+import laborerRoutes from './routes/laborerRoutes.js'
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -31,10 +34,13 @@ app.use(cors())
 app.use(morgan('dev'))
 
 // API Routes
+app.use('/api/auth', authRoutes)
 app.use('/api/users', userRoutes)
 app.use('/api/admin', adminRoutes)
 app.use('/api/reviews', reviewRoutes)
 app.use('/api/chats', chatRoutes)
+app.use('/api/jobs', jobRoutes)
+app.use('/api/laborers', laborerRoutes)
 
 // Health Check
 app.get('/', (req, res) => {
