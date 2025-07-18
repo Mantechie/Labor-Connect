@@ -1,0 +1,181 @@
+/* src/styles/components.css */
+
+/* Header Styles */
+.navbar-brand {
+  font-weight: bold;
+  font-size: 1.4rem;
+  color: #198754 !important;
+}
+
+.nav-link {
+  color: #333 !important;
+  font-weight: 500;
+  margin-right: 15px;
+}
+
+.nav-link:hover {
+  color: #198754 !important;
+}
+
+/* Footer Styles */
+.footer {
+  background-color: #343a40;
+  color: #fff;
+  text-align: center;
+  padding: 16px 0;
+  font-size: 0.9rem;
+}
+
+/* Card spacing in laborer/job components */
+.card-custom {
+  transition: transform 0.2s ease;
+}
+
+.card-custom:hover {
+  transform: translateY(-5px);
+  box-shadow: 0 6px 15px rgba(0, 0, 0, 0.1);
+}
+
+/* Availability Badge */
+.badge-available {
+  background-color: #28a745;
+}
+
+.badge-busy {
+  background-color: #dc3545;
+}
+
+/* Smooth Transition for Navbar Links */
+.nav-link {
+  transition: color 0.3s ease;
+}
+
+/* Enhanced Button Hover */
+.btn:hover {
+  opacity: 0.9;
+  transform: scale(1.02);
+  transition: all 0.2s ease-in-out;
+}
+
+/* Responsive Footer Padding */
+@media (max-width: 576px) {
+  .footer {
+    font-size: 0.8rem;
+    padding: 12px 0;
+  }
+}
+
+/* Chat Bubble */
+.chat-bubble {
+  padding: 10px 14px;
+  border-radius: 15px;
+  max-width: 70%;
+  margin-bottom: 8px;
+}
+
+.chat-bubble.user {
+  background-color: #0d6efd;
+  color: white;
+  align-self: flex-end;
+}
+
+.chat-bubble.laborer {
+  background-color: #f1f1f1;
+  color: #333;
+  align-self: flex-start;
+}
+
+/* Read Status Tick Styles */
+.read-status {
+  font-size: 0.75rem;
+  color: #666;
+  margin-left: 6px;
+}
+.read-status.read {
+  color: #28a745;
+}
+
+/* Input Glow on Focus */
+.form-control:focus {
+  box-shadow: 0 0 0 0.2rem rgba(25, 135, 84, 0.25);
+  border-color: #198754;
+}
+
+/* Chat Interface Container */
+.chat-container {
+  max-width: 800px;
+  margin: auto;
+  padding: 10px;
+}
+
+/* Chat Box Area */
+.chat-box {
+  border: 1px solid #ccc;
+  height: 400px;
+  overflow-y: auto;
+  padding: 10px;
+  background: #f9f9f9;
+  border-radius: 8px;
+}
+
+/* Chat Message Bubbles */
+.message {
+  margin-bottom: 10px;
+  max-width: 75%;
+  padding: 8px 12px;
+  border-radius: 12px;
+  position: relative;
+}
+
+.message.sent {
+  margin-left: auto;
+  background-color: #d1e7dd;
+  text-align: right;
+}
+
+.message.received {
+  background-color: #e2e3e5;
+  text-align: left;
+}
+
+.msg-meta {
+  font-size: 10px;
+  display: flex;
+  justify-content: flex-end;
+  gap: 5px;
+  align-items: center;
+}
+
+.msg-meta small {
+  color: #666;
+}
+
+.delete-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 12px;
+  color: #dc3545;
+}
+
+/* Input Box */
+.chat-input {
+  display: flex;
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.chat-input input {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #ccc;
+}
+
+.chat-input button {
+  padding: 10px 16px;
+  border: none;
+  background-color: #0d6efd;
+  color: white;
+  border-radius: 8px;
+}

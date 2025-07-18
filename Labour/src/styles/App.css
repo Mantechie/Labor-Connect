@@ -1,0 +1,27 @@
+
+
+/* src/styles/App.css */
+
+/* Page layout */
+body {
+  background-color: #f8f9fa; /* Light gray background */
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  margin: 0;
+  padding: 0;
+}
+
+main {
+  padding: 20px;
+}
+
+/* For spacing between sections */
+.section {
+  padding: 40px 0;
+}
+
+/* Utility */
+.text-primary-gradient {
+  background: -webkit-linear-gradient(45deg, #198754, #0dcaf0);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
