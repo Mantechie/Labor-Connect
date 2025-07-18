@@ -6,7 +6,7 @@ import {
   deleteJob,
 } from '../controllers/jobController.js'
 
-import {verifyOwner} from '../middleware/verifyOwner.js'
+import verifyOwner from '../middlewares/verifyOwner.js'
 import { protect } from '../middlewares/authMiddleware.js'
 
 const router = express.Router()
