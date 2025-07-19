@@ -7,8 +7,8 @@ import Header from './Components/Header';
 import Footer from './Components/Footer';
 import { ToastProvider } from './Components/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
-import ProtectedRoute from './components/ProtectedRoute';
-import AdminProtectedRoute from './components/AdminProtectedRoute';
+import ProtectedRoute from './Components/ProtectedRoute';
+import AdminProtectedRoute from './Components/AdminProtectedRoute';
 
 // Pages
 import HomePage from './pages/HomePage';

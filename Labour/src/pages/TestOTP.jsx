@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../Components/ToastContext';
 import { Card, Button, Form, Alert, Badge } from 'react-bootstrap';
 import axiosInstance from '../utils/axiosInstance';
-import AuthDebug from '../components/AuthDebug';
+import AuthDebug from '../Components/AuthDebug';
 
 const TestOTP = () => {
   const { sendOTP, verifyOTP } = useAuth();

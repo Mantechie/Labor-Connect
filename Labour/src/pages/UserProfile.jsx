@@ -3,7 +3,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { useToast } from '../Components/ToastContext';
 import axiosInstance from '../utils/axiosInstance';
 import { Card, Button, Form, Modal, Tab, Tabs, Badge, Alert } from 'react-bootstrap';
-import ProfilePhotoUpload from '../components/ProfilePhotoUpload';
+import ProfilePhotoUpload from '../Components/ProfilePhotoUpload';
 
 const UserProfile = () => {
   const { user, updateUser, logout } = useAuth();
