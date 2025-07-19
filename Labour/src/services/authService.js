@@ -5,9 +5,12 @@ class AuthService {
   async login(email, password) {
     try {
       const response = await axiosInstance.post('/auth/login', { email, password });
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token);
+      if (response.data.user.token) {
+        localStorage.setItem('token', response.data.user.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
+        if (response.data.user.refreshToken) {
+          localStorage.setItem('refreshToken', response.data.user.refreshToken);
+        }
       }
       return response.data;
     } catch (error) {
@@ -19,9 +22,12 @@ class AuthService {
   async register(userData) {
     try {
       const response = await axiosInstance.post('/auth/register', userData);
-      if (response.data.token) {
-        localStorage.setItem('token', response.data.token);
+      if (response.data.user.token) {
+        localStorage.setItem('token', response.data.user.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
+        if (response.data.user.refreshToken) {
+          localStorage.setItem('refreshToken', response.data.user.refreshToken);
+        }
       }
       return response.data;
     } catch (error) {
@@ -30,19 +36,29 @@ class AuthService {
   }
 
   // Send OTP
-  async sendOTP(email) {
+  async sendOTP(email, phone) {
     try {
-      const response = await axiosInstance.post('/auth/send-otp', { email });
+      console.log('🔍 Sending OTP request:', { email, phone });
+      const response = await axiosInstance.post('/auth/send-otp', { email, phone });
+      console.log('✅ OTP response:', response.data);
       return response.data;
     } catch (error) {
+      console.error('❌ OTP error:', error);
       throw error.response?.data || error.message;
     }
   }
 
   // Verify OTP
-  async verifyOTP(email, otp) {
+  async verifyOTP(email, phone, otp) {
     try {
-      const response = await axiosInstance.post('/auth/verify-otp', { email, otp });
+      const response = await axiosInstance.post('/auth/verify-otp', { email, phone, otp });
+      if (response.data.user.token) {
+        localStorage.setItem('token', response.data.user.token);
+        localStorage.setItem('user', JSON.stringify(response.data.user));
+        if (response.data.user.refreshToken) {
+          localStorage.setItem('refreshToken', response.data.user.refreshToken);
+        }
+      }
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;
@@ -73,10 +89,21 @@ class AuthService {
     }
   }
 
-  // Logout
-  logout() {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
+  // Logout - call backend to invalidate refresh token
+  async logout() {
+    try {
+      const token = localStorage.getItem('token');
+      if (token) {
+        await axiosInstance.post('/auth/logout');
+      }
+    } catch (error) {
+      console.error('Logout error:', error);
+    } finally {
+      // Clear all auth data
+      localStorage.removeItem('token');
+      localStorage.removeItem('refreshToken');
+      localStorage.removeItem('user');
+    }
   }
 
   // Check if user is authenticated

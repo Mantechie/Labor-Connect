@@ -1,29 +1,45 @@
-import express from 'express'
+import express from 'express';
+import { protect } from '../middlewares/authMiddleware.js';
 import {
-  getLaborerDashboard,
-  updateSpecialization,
-  uploadWorkMedia,
+  getJobRequests,
+  handleJobAction,
+  updateProfile,
   updateAvailability,
-  getAssignedJobs,
-} from '../controllers/laborerController.js'
+  uploadDocuments,
+  getPortfolio,
+  addPortfolioItem,
+  getEarnings,
+  getCompletedJobs,
+  upload
+} from '../controllers/laborerController.js';
 
-import { protect } from '../middlewares/authMiddleware.js'
+const router = express.Router();
 
-const router = express.Router()
+// All routes require authentication
+router.use(protect);
 
-// 📌 GET /api/laborers/dashboard - Laborer's own dashboard info
-router.get('/dashboard', protect, getLaborerDashboard)
+// Job management routes
+router.get('/job-requests', getJobRequests);
+router.put('/jobs/:jobId/:action', handleJobAction); // accept/reject
+router.get('/completed-jobs', getCompletedJobs);
 
-// 📌 PUT /api/laborers/specialization - Update laborer's work specialization
-router.put('/specialization', protect, updateSpecialization)
+// Profile management routes
+router.put('/profile', updateProfile);
+router.put('/availability', updateAvailability);
 
-// 📌 POST /api/laborers/media - Upload photos/videos of completed work
-router.post('/media', protect, uploadWorkMedia)
+// Document upload routes
+router.post('/documents', upload.fields([
+  { name: 'aadhar', maxCount: 1 },
+  { name: 'idProof', maxCount: 1 },
+  { name: 'workLicense', maxCount: 1 },
+  { name: 'otherDocs', maxCount: 5 }
+]), uploadDocuments);
 
-// 📌 PATCH /api/laborers/availability - Set availability status
-router.patch('/availability', protect, updateAvailability)
+// Portfolio routes
+router.get('/portfolio', getPortfolio);
+router.post('/portfolio', upload.single('image'), addPortfolioItem);
 
-// 📌 GET /api/laborers/jobs - Get job requests/assignments for the laborer
-router.get('/jobs', protect, getAssignedJobs)
+// Earnings routes
+router.get('/earnings', getEarnings);
 
-export default router
+export default router;

@@ -1,37 +1,35 @@
-import express from 'express'
+import express from 'express';
+import { protectAdmin, hasPermission } from '../middlewares/adminAuthMiddleware.js';
 import {
+  getAdminStats,
+  getRecentActivity,
   getAllUsers,
   getAllLaborers,
-  getAllJobs,
-  approveLaborer,
-  getAllChats,
-  getAllReviews,
-  getAnalytics,
-} from '../controllers/adminController.js'
+  updateUserStatus,
+  verifyLaborer,
+  getJobApplications,
+  getSystemHealth
+} from '../controllers/adminController.js';
 
-import { protect, isAdmin } from '../middlewares/authMiddleware.js'
+const router = express.Router();
 
-const router = express.Router()
+// All admin routes require admin authentication
+router.use(protectAdmin);
 
-// 📌 GET /api/admin/users - Get all users
-router.get('/users', protect, isAdmin, getAllUsers)
+// Dashboard and analytics
+router.get('/stats', hasPermission('view_analytics'), getAdminStats);
+router.get('/recent-activity', hasPermission('view_analytics'), getRecentActivity);
+router.get('/system-health', hasPermission('system_settings'), getSystemHealth);
 
-// 📌 GET /api/admin/laborers - Get all laborers
-router.get('/laborers', protect, isAdmin, getAllLaborers)
+// User management
+router.get('/users', hasPermission('manage_users'), getAllUsers);
+router.put('/users/:id/status', hasPermission('manage_users'), updateUserStatus);
 
-// 📌 PUT /api/admin/laborers/:id/approve - Approve laborer profile
-router.put('/laborers/:id/approve', protect, isAdmin, approveLaborer)
+// Laborer management
+router.get('/laborers', hasPermission('manage_laborers'), getAllLaborers);
+router.put('/laborers/:id/verify', hasPermission('manage_laborers'), verifyLaborer);
 
-// 📌 GET /api/admin/jobs - Get all job posts
-router.get('/jobs', protect, isAdmin, getAllJobs)
+// Job applications
+router.get('/job-applications', hasPermission('manage_jobs'), getJobApplications);
 
-// 📌 GET /api/admin/chats - View all chats
-router.get('/chats', protect, isAdmin, getAllChats)
-
-// 📌 GET /api/admin/reviews - View all reviews
-router.get('/reviews', protect, isAdmin, getAllReviews)
-
-// 📌 GET /api/admin/analytics - Get dashboard analytics
-router.get('/analytics', protect, isAdmin, getAnalytics)
-
-export default router
+export default router;

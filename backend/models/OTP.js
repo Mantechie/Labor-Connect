@@ -2,10 +2,14 @@ import mongoose from 'mongoose'
 
 const otpSchema = new mongoose.Schema(
   {
-    user: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User',
+    email: {
+      type: String,
       required: true,
+      lowercase: true,
+    },
+    phone: {
+      type: String,
+      required: false,
     },
     otpCode: {
       type: String,
@@ -14,12 +18,11 @@ const otpSchema = new mongoose.Schema(
     type: {
       type: String,
       enum: ['email', 'sms'],
-      default: 'sms',
+      default: 'email',
     },
-    createdAt: {
+    expiresAt: {
       type: Date,
-      default: Date.now,
-      expires: 600, // auto-delete after 10 minutes (600 seconds)
+      required: true,
     },
     isUsed: {
       type: Boolean,

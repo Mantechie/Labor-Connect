@@ -10,6 +10,7 @@ import userRoutes from './routes/userRoutes.js'
 import laborerRoutes from './routes/laborerRoutes.js'
 import jobRoutes from './routes/jobRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
+import adminAuthRoutes from './routes/adminAuthRoutes.js'
 import reviewRoutes from './routes/reviewRoutes.js'
 import chatRoutes from './routes/chatRoutes.js'
 import categoryRoutes from './routes/categoryRoutes.js';
@@ -44,17 +45,49 @@ app.use(cors({
 }))
 app.use(morgan('dev'))
 
+// Serve static files
+app.use('/uploads', express.static('uploads'))
+
+// Health check endpoint
+app.get('/api/health', (req, res) => {
+  res.json({ 
+    status: 'OK', 
+    message: 'Server is running',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // API Routes
-app.use('/api/auth', authRoutes)
-app.use('/api/users', userRoutes)
-app.use('/api/laborers', laborerRoutes)
-app.use('/api/jobs', jobRoutes)
-app.use('/api/admin', adminRoutes)
-app.use('/api/reviews', reviewRoutes)
-app.use('/api/chats', chatRoutes)
+console.log('🔧 Mounting API routes...');
+
+app.use('/api/auth', (req, res, next) => {
+  console.log('🔍 Regular Auth Route:', req.method, req.originalUrl);
+  next();
+}, authRoutes);
+
+app.use('/api/users', userRoutes);
+app.use('/api/laborers', laborerRoutes);
+app.use('/api/jobs', jobRoutes);
+
+// IMPORTANT: Mount admin auth routes BEFORE admin routes
+// This prevents the admin middleware from being applied to auth routes
+app.use('/api/admin/auth', (req, res, next) => {
+  console.log('🔍 Admin Auth Route:', req.method, req.originalUrl);
+  next();
+}, adminAuthRoutes);
+
+app.use('/api/admin', (req, res, next) => {
+  console.log('🔍 Admin Route:', req.method, req.originalUrl);
+  next();
+}, adminRoutes);
+
+app.use('/api/reviews', reviewRoutes);
+app.use('/api/chats', chatRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/support', reportRoutes);
 app.use('/api/applications', jobApplicationRoutes);
+
+console.log('✅ All API routes mounted successfully');
 
 // Health Check
 app.get('/', (req, res) => {

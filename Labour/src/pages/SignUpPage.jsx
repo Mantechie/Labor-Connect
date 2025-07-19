@@ -1,10 +1,11 @@
 // src/pages/SignupPage.jsx
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import authService from '../services/authService';
+import { useAuth } from '../contexts/AuthContext';
 
 const SignupPage = () => {
   const navigate = useNavigate();
+  const { register } = useAuth();
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -66,14 +67,8 @@ const SignupPage = () => {
         password,
         role: role.toLowerCase()
       };
-      const response = await authService.register(userData);
-      if (response.user) {
-        if (response.user.role === 'laborer') {
-          navigate('/laborer/dashboard');
-        } else {
-          navigate('/');
-        }
-      }
+      await register(userData);
+      navigate('/');
     } catch (error) {
       setError(error.message || 'Registration failed. Please try again.');
     } finally {

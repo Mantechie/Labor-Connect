@@ -2,7 +2,7 @@
 // Using bootstrap for styling 
 // import react module & useState hook which add state variable to component 
 import React, { useState, useEffect } from 'react';
-import authService from '../services/authService';
+import { useAuth } from '../contexts/AuthContext';
 import axiosInstance from '../utils/axiosInstance';
 import { useToast } from './ToastContext';
 import { useNavigate } from 'react-router-dom';
@@ -28,15 +28,15 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   // Restrict to admin only
   useEffect(() => {
-    const user = authService.getStoredUser();
     if (!user || user.role !== 'admin') {
       showToast('Access denied: Admins only', 'danger');
       navigate('/login');
     }
-  }, [navigate, showToast]);
+  }, [user, navigate, showToast]);
 
   // Fetch job applications
   const fetchApplications = async () => {

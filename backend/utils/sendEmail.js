@@ -2,27 +2,41 @@ import nodemailer from 'nodemailer'
 
 const sendEmail = async ({ to, subject, text, html }) => {
   try {
-    // 1. Create transporter
-    const transporter = nodemailer.createTransport({
-      service: 'gmail', // e.g., Gmail, or use custom SMTP
-      auth: {
-        user: process.env.EMAIL_USER, // your email
-        pass: process.env.EMAIL_PASS, // app password or SMTP password
-      },
-    })
+    // Create a test account using Ethereal Email (for development)
+    // This will actually send emails that can be viewed in a web interface
+    const testAccount = await nodemailer.createTestAccount();
 
-    // 2. Email options
+    // Create transporter using test account
+    const transporter = nodemailer.createTransport({
+      host: 'smtp.ethereal.email',
+      port: 587,
+      secure: false, // true for 465, false for other ports
+      auth: {
+        user: testAccount.user,
+        pass: testAccount.pass,
+      },
+    });
+
+    // Email options
     const mailOptions = {
-      from: `"LabourConnect" <${process.env.EMAIL_USER}>`,
+      from: `"LabourConnect" <${testAccount.user}>`,
       to,
       subject,
       text,
-      html, // Optional: for styled OTP or rich content
+      html,
     }
 
-    // 3. Send email
+    // Send email
     const info = await transporter.sendMail(mailOptions)
-    console.log(`✅ Email sent: ${info.response}`)
+    console.log(`✅ Email sent successfully!`)
+    console.log(`📧 Message ID: ${info.messageId}`)
+    console.log(`🔗 Preview URL: ${nodemailer.getTestMessageUrl(info)}`)
+    
+    // Return the preview URL for development
+    return {
+      messageId: info.messageId,
+      previewUrl: nodemailer.getTestMessageUrl(info)
+    };
   } catch (error) {
     console.error(`❌ Email error: ${error.message}`)
     throw new Error('Email could not be sent')

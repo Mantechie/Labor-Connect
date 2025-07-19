@@ -13,9 +13,16 @@ dotenv.config() //Initialize env variables
 const generateToken = (id, role) => {
   // Creates a signed JWT containing ID,role
   // Uses JWT_SECRET from .env to sign the token
-  // Tokens expire after 7 days
+  // Tokens expire after 30 days for better user experience
   return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-    expiresIn: '7d',
+    expiresIn: '30d',
+  })
+}
+
+// Generate refresh token
+const generateRefreshToken = (id) => {
+  return jwt.sign({ id }, process.env.JWT_SECRET, {
+    expiresIn: '60d', // Refresh token lasts 60 days
   })
 }
 
@@ -49,7 +56,15 @@ export const register = async (req, res) => {
 
     await newUser.save()  // Save to database
     
-    // Respond with user data + token
+    // Generate tokens
+    const token = generateToken(newUser._id, newUser.role);
+    const refreshToken = generateRefreshToken(newUser._id);
+    
+    // Store refresh token in user document
+    newUser.refreshToken = refreshToken;
+    await newUser.save();
+    
+    // Respond with user data + tokens
     //  Excludes password for security
     res.status(201).json({
       message: 'Registration successful',
@@ -59,8 +74,8 @@ export const register = async (req, res) => {
         email: newUser.email,
         role: newUser.role,
         phone: newUser.phone,
-        // Generate JWT that returns token for immediate login after registration
-        token: generateToken(newUser._id, newUser.role), 
+        token: token,
+        refreshToken: refreshToken,
       },
     })
   } catch (err) {
@@ -87,7 +102,15 @@ export const login = async (req, res) => {
       return res.status(400).json({ message: 'Invalid email or password' })
     }
     
-    // Respond with user data + token
+    // Generate tokens
+    const token = generateToken(user._id, user.role);
+    const refreshToken = generateRefreshToken(user._id);
+    
+    // Store refresh token in user document
+    user.refreshToken = refreshToken;
+    await user.save();
+    
+    // Respond with user data + tokens
     // Return token immediately after login
     res.status(200).json({
       message: 'Login successful',
@@ -97,7 +120,8 @@ export const login = async (req, res) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
-        token: generateToken(user._id, user.role),
+        token: token,
+        refreshToken: refreshToken,
       },
     })
   } catch (err) {
@@ -105,41 +129,272 @@ export const login = async (req, res) => {
   }
 }
 
-// @desc Send OTP to email before registration
+// @desc Send OTP to email/phone for login
 // @route POST /api/auth/send-otp
 export const sendOtp = async (req, res) => {
-  const { email } = req.body
+  try {
+    const { email, phone } = req.body
 
-  const otp = generateOTP() // e.g., returns 6-digit string
-  const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 min expiry
+    if (!email && !phone) {
+      return res.status(400).json({ message: 'Email or phone number is required' })
+    }
 
-  await OTP.deleteMany({ email }) // Remove old OTPs
+    // Check if user exists
+    let user;
+    if (email) {
+      user = await User.findOne({ email })
+    } else if (phone) {
+      user = await User.findOne({ phone })
+    }
 
-  const newOtp = new OTP({ email, otp, expiresAt })
-  await newOtp.save()
+    if (!user) {
+      return res.status(404).json({ message: 'User not found. Please register first.' })
+    }
 
-  // Send OTP via Email 
-  await sendEmail({
-    to: email,
-    subject: 'Labor Connect - OTP Verification',
-    text: `Your OTP is ${otp}`,
-    html: `<h2>Your OTP is: <strong>${otp}</strong></h2>`
-  })
+    const otpCode = generateOTP() // Generate 6-digit OTP
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000) // 10 min expiry
 
-  res.status(200).json({ message: 'OTP sent to your email' })
+    // Remove old OTPs for this user
+    if (email) {
+      await OTP.deleteMany({ email })
+    } else if (phone) {
+      await OTP.deleteMany({ phone })
+    }
+
+    // Create new OTP
+    const newOtp = new OTP({
+      email: email || user.email,
+      phone: phone || user.phone,
+      otpCode,
+      expiresAt,
+      type: email ? 'email' : 'sms'
+    })
+
+    await newOtp.save()
+
+    // Send OTP via Email (for now, we'll focus on email)
+    if (email) {
+      try {
+        const emailResult = await sendEmail({
+          to: email,
+          subject: 'LabourConnect - OTP Verification',
+          text: `Your OTP is ${otpCode}. Valid for 10 minutes.`,
+          html: `
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+              <h2 style="color: #0D47A1;">🔐 OTP Verification</h2>
+              <p>Hello ${user.name},</p>
+              <p>Your OTP for LabourConnect login is:</p>
+              <div style="background: #f5f5f5; padding: 20px; text-align: center; border-radius: 8px; margin: 20px 0;">
+                <h1 style="color: #0D47A1; font-size: 32px; margin: 0; letter-spacing: 5px;">${otpCode}</h1>
+              </div>
+              <p><strong>Valid for 10 minutes</strong></p>
+              <p>If you didn't request this OTP, please ignore this email.</p>
+              <hr style="margin: 20px 0;">
+              <p style="color: #666; font-size: 12px;">LabourConnect - Connecting Labour with Opportunities</p>
+            </div>
+          `
+        })
+        
+        const responseData = {
+          message: 'OTP sent to your email',
+          email: email,
+          expiresIn: '10 minutes'
+        };
+        
+        // Add preview URL for development
+        if (emailResult && emailResult.previewUrl) {
+          responseData.previewUrl = emailResult.previewUrl;
+          console.log(`🔗 Email Preview URL: ${emailResult.previewUrl}`);
+        }
+        
+        res.status(200).json(responseData);
+      } catch (emailError) {
+        console.error('Email sending failed:', emailError)
+        res.status(500).json({ message: 'Failed to send OTP email. Please try again.' })
+      }
+    } else {
+      // For SMS, you would implement SMS sending here
+      res.status(200).json({ 
+        message: 'OTP sent to your phone',
+        phone: phone,
+        expiresIn: '10 minutes'
+      })
+    }
+  } catch (error) {
+    console.error('Send OTP error:', error)
+    res.status(500).json({ message: 'Failed to send OTP. Please try again.' })
+  }
 }
 
-// @desc Verify OTP before registration or login
+// @desc Verify OTP and login user
 // @route POST /api/auth/verify-otp
 export const verifyOtp = async (req, res) => {
-  const { email, otp } = req.body
+  try {
+    const { email, phone, otp } = req.body
 
-  const existingOtp = await OTP.findOne({ email, otp })
+    if (!email && !phone) {
+      return res.status(400).json({ message: 'Email or phone number is required' })
+    }
 
-  if (!existingOtp || existingOtp.expiresAt < new Date()) {
-    return res.status(400).json({ message: 'Invalid or expired OTP' })
+    if (!otp) {
+      return res.status(400).json({ message: 'OTP is required' })
+    }
+
+    // Find OTP record
+    let otpRecord;
+    if (email) {
+      otpRecord = await OTP.findOne({ email, otpCode: otp })
+    } else if (phone) {
+      otpRecord = await OTP.findOne({ phone, otpCode: otp })
+    }
+
+    if (!otpRecord) {
+      return res.status(400).json({ message: 'Invalid OTP' })
+    }
+
+    // Check if OTP is expired
+    if (otpRecord.expiresAt < new Date()) {
+      await OTP.deleteMany({ email: otpRecord.email, phone: otpRecord.phone })
+      return res.status(400).json({ message: 'OTP has expired. Please request a new one.' })
+    }
+
+    // Check if OTP is already used
+    if (otpRecord.isUsed) {
+      return res.status(400).json({ message: 'OTP has already been used' })
+    }
+
+    // Find user
+    let user;
+    if (email) {
+      user = await User.findOne({ email })
+    } else if (phone) {
+      user = await User.findOne({ phone })
+    }
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' })
+    }
+
+    // Mark OTP as used
+    otpRecord.isUsed = true
+    await otpRecord.save()
+
+    // Clear all OTPs for this user
+    if (email) {
+      await OTP.deleteMany({ email })
+    } else if (phone) {
+      await OTP.deleteMany({ phone })
+    }
+
+    // Generate JWT token and return user data
+    const token = generateToken(user._id, user.role)
+
+    res.status(200).json({
+      message: 'OTP verified successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        token: token,
+      },
+    })
+  } catch (error) {
+    console.error('Verify OTP error:', error)
+    res.status(500).json({ message: 'Failed to verify OTP. Please try again.' })
   }
-
-  await OTP.deleteMany({ email }) // Clear OTP after verification
-  res.status(200).json({ message: 'OTP verified successfully' })
 }
+
+// @desc    Refresh access token
+// @route   POST /api/auth/refresh
+export const refreshToken = async (req, res) => {
+  try {
+    const { refreshToken } = req.body;
+    
+    if (!refreshToken) {
+      return res.status(400).json({ message: 'Refresh token is required' });
+    }
+    
+    // Verify refresh token
+    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    
+    // Find user with this refresh token
+    const user = await User.findById(decoded.id);
+    if (!user || user.refreshToken !== refreshToken) {
+      return res.status(401).json({ message: 'Invalid refresh token' });
+    }
+    
+    // Generate new tokens
+    const newToken = generateToken(user._id, user.role);
+    const newRefreshToken = generateRefreshToken(user._id);
+    
+    // Update refresh token in database
+    user.refreshToken = newRefreshToken;
+    await user.save();
+    
+    res.json({
+      token: newToken,
+      refreshToken: newRefreshToken,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+      }
+    });
+  } catch (error) {
+    console.error('Refresh token error:', error);
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Invalid refresh token' });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Refresh token expired' });
+    }
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Logout user (invalidate refresh token)
+// @route   POST /api/auth/logout
+export const logout = async (req, res) => {
+  try {
+    const userId = req.user.id;
+    
+    // Clear refresh token from user document
+    await User.findByIdAndUpdate(userId, { refreshToken: null });
+    
+    res.json({ message: 'Logged out successfully' });
+  } catch (error) {
+    console.error('Logout error:', error);
+    res.status(500).json({ message: 'Server error' });
+  }
+};
+
+// @desc    Get current user
+// @route   GET /api/auth/me
+// @access  Private
+export const getCurrentUser = async (req, res) => {
+  try {
+    const user = await User.findById(req.user.id).select('-password');
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    res.json({
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone,
+        address: user.address,
+        profilePhoto: user.profilePhoto,
+        createdAt: user.createdAt
+      }
+    });
+  } catch (error) {
+    res.status(500).json({ message: error.message });
+  }
+};

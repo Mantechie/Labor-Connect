@@ -1,9 +1,13 @@
 import express from 'express'
+import { protect } from '../middlewares/authMiddleware.js'
 import {
   register,
   login,
   sendOtp,
   verifyOtp,
+  getCurrentUser,
+  refreshToken,
+  logout,
 } from '../controllers/authController.js'
 
 const router = express.Router()
@@ -19,5 +23,14 @@ router.post('/send-otp', sendOtp)
 
 // 📌 POST /api/auth/verify-otp - Verify OTP
 router.post('/verify-otp', verifyOtp)
+
+// 📌 POST /api/auth/refresh - Refresh access token
+router.post('/refresh', refreshToken)
+
+// 📌 POST /api/auth/logout - Logout user
+router.post('/logout', protect, logout)
+
+// 📌 GET /api/auth/me - Get current user
+router.get('/me', protect, getCurrentUser)
 
 export default router

@@ -1,10 +1,12 @@
 // src/pages/LoginPage.jsx
 import React, { useState } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import authService from '../services/authService';
+import { Link, useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 
 const LoginPage = () => {
   const navigate = useNavigate();
+  const location = useLocation();
+  const { login } = useAuth();
   const [credentials, setCredentials] = useState({ email: '', password: '' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -33,16 +35,9 @@ const LoginPage = () => {
     }
 
     try {
-      const response = await authService.login(credentials.email, credentials.password);
-      if (response.user) {
-        if (response.user.role === 'laborer') {
-          navigate('/laborer/dashboard');
-        } else if (response.user.role === 'admin') {
-          navigate('/admin/dashboard');
-        } else {
-          navigate('/');
-        }
-      }
+      await login(credentials.email, credentials.password);
+      const from = location.state?.from?.pathname || '/';
+      navigate(from, { replace: true });
     } catch (error) {
       setError(error.message || 'Login failed. Please try again.');
     } finally {
@@ -118,7 +113,7 @@ const LoginPage = () => {
             Don't have an account? <Link to="/signup">Sign up</Link>
           </small><br />
           <small>
-            <Link to="/otp-verification">Login with OTP</Link>
+            <Link to="/otp-login">Login with OTP</Link>
           </small>
         </div>
       </div>

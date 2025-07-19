@@ -1,29 +1,29 @@
 import express from 'express'
+import { protect } from '../middlewares/authMiddleware.js'
 import {
   getUserProfile,
-  updateLaborerProfile,
-  toggleAvailability,
-  uploadPortfolio,
-  getLaborerById,
-} from '../controllers/laborerController.js'
-
-import { protect } from '../middlewares/authMiddleware.js'
+  updateUserProfile,
+  updatePassword,
+  uploadProfilePhoto,
+  getPostedJobs,
+  getHiredLabor,
+  deleteUserProfile
+} from '../controllers/userController.js'
 
 const router = express.Router()
 
-// 📌 GET /api/users/profile - Get logged-in user/laborer profile
-router.get('/profile', protect, getUserProfile)
+// All routes are protected
+router.use(protect)
 
-// 📌 PUT /api/users/profile - Update profile details
-router.put('/profile', protect, updateLaborerProfile)
+// Profile management
+router.get('/profile', getUserProfile)
+router.put('/profile', updateUserProfile)
+router.put('/password', updatePassword)
+router.post('/profile-photo', uploadProfilePhoto)
+router.delete('/profile', deleteUserProfile)
 
-// 📌 PATCH /api/users/availability - Toggle availability (available/busy)
-router.patch('/availability', protect, toggleAvailability)
-
-// 📌 POST /api/users/portfolio - Upload portfolio (images/videos)
-router.post('/portfolio', protect, uploadPortfolio)
-
-// 📌 GET /api/users/laborers - Fetch filtered laborers (by region, skill, rating, etc.)
-router.get('/laborers', getLaborerById)
+// History
+router.get('/posted-jobs', getPostedJobs)
+router.get('/hired-labor', getHiredLabor)
 
 export default router
