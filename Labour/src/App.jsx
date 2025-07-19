@@ -45,35 +45,38 @@ const App = () => {
             <Header />
             <main className="flex-fill">
               <Routes>
-                              <Route path="/" element={<HomePage />} />
-              <Route path="/signup" element={<SignupPage />} />
-              <Route path="/login" element={<LoginPage />} />
-              <Route path="/otp-login" element={<OTPLoginPage />} />
-              <Route path="/otp-verification" element={<OTPVerificationPage />} />
-              <Route path="/test-otp" element={<TestOTP />} />
-              <Route path="/profile" element={
-                <ProtectedRoute>
-                  <UserProfile />
-                </ProtectedRoute>
-              } />
+                <Route path="/" element={<HomePage />} />
+                <Route path="/signup" element={<SignupPage />} />
+                <Route path="/login" element={<LoginPage />} />
+                <Route path="/otp-login" element={<OTPLoginPage />} />
+                <Route path="/otp-verification" element={<OTPVerificationPage />} />
+                <Route path="/test-otp" element={<TestOTP />} />
+                
+                {/* Admin Routes - Must come before other protected routes */}
+                <Route path="/admin/login" element={<AdminLogin />} />
+                <Route path="/admin/dashboard" element={
+                  <AdminProtectedRoute>
+                    <AdminDashboard />
+                  </AdminProtectedRoute>
+                } />
+                <Route path="/admin-login" element={<AdminLogin />} />
+                
+                {/* User Protected Routes */}
+                <Route path="/profile" element={
+                  <ProtectedRoute>
+                    <UserProfile />
+                  </ProtectedRoute>
+                } />
                 <Route path="/job-post" element={
                   <ProtectedRoute>
                     <JobPostPage />
                   </ProtectedRoute>
                 } />
-                <Route path="/job-listings" element={<JobListing />} />
-                <Route path="/laborer-profile" element={<LaborerProfile />} />
                 <Route path="/chat" element={
                   <ProtectedRoute>
                     <ChatInterface />
                   </ProtectedRoute>
                 } />
-                <Route path="/admin" element={
-                  <ProtectedRoute requiredRole="admin">
-                    <AdminDashboard />
-                  </ProtectedRoute>
-                } />
-                <Route path="/help" element={<HelpPage />} />
                 <Route path="/browse-laborers" element={
                   <ProtectedRoute>
                     <BrowseLaborers />
@@ -94,13 +97,11 @@ const App = () => {
                     <UserDashboard />
                   </ProtectedRoute>
                 } />
-                <Route path="/admin/login" element={<AdminLogin />} />
-                <Route path="/admin/dashboard" element={
-                  <AdminProtectedRoute>
-                    <AdminDashboard />
-                  </AdminProtectedRoute>
-                } />
-                <Route path="/admin-login" element={<AdminLogin />} />
+                
+                {/* Public Routes */}
+                <Route path="/job-listings" element={<JobListing />} />
+                <Route path="/laborer-profile" element={<LaborerProfile />} />
+                <Route path="/help" element={<HelpPage />} />
               </Routes>
             </main>
             <Footer />
