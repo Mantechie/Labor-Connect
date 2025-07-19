@@ -6,7 +6,7 @@ dotenv.config()
 // Environment configuration with defaults
 const config = {
   // Server Configuration
-  PORT: process.env.PORT || 5000,
+  PORT: process.env.PORT || 8080,
   NODE_ENV: process.env.NODE_ENV || 'development',
   
   // MongoDB Configuration

@@ -96,7 +96,8 @@ app.use(notFound)
 app.use(errorHandler)
 
 // Server Start
-server.listen(config.PORT, () => {
+const PORT = process.env.PORT || 8080
+server.listen(PORT, () => {
   console.log(`🚀 Server running in ${config.NODE_ENV} mode on port ${config.PORT}`)
   console.log(`📧 Email configured: ${config.EMAIL_USER ? 'Yes' : 'No'}`)
   console.log(`📱 SMS configured: ${config.TWILIO_ACCOUNT_SID ? 'Yes' : 'No'}`)

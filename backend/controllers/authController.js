@@ -23,7 +23,7 @@ const generateToken = (id, role) => {
 // @route   POST /api/auth/register
 export const register = async (req, res) => {
   try {
-    const { name, email, password, role } = req.body //Destructure request body
+    const { name, email, password, role, phone } = req.body //Destructure request body
 
     // Check if user already exists
     // Prevents duplicate emails
@@ -44,6 +44,7 @@ export const register = async (req, res) => {
       email,
       password: hashedPassword, // Store hashed password (never plaintext!)
       role, // 'user' or 'laborer' or 'admin'
+      phone: phone || '', // Include phone if provided
     })
 
     await newUser.save()  // Save to database
@@ -57,6 +58,7 @@ export const register = async (req, res) => {
         name: newUser.name,
         email: newUser.email,
         role: newUser.role,
+        phone: newUser.phone,
         // Generate JWT that returns token for immediate login after registration
         token: generateToken(newUser._id, newUser.role), 
       },
@@ -94,6 +96,7 @@ export const login = async (req, res) => {
         name: user.name,
         email: user.email,
         role: user.role,
+        phone: user.phone,
         token: generateToken(user._id, user.role),
       },
     })

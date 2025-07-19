@@ -1,7 +1,7 @@
 // Test script to verify backend-frontend integration
 import axios from 'axios';
 
-const API_BASE_URL = 'http://localhost:5000/api';
+const API_BASE_URL = 'http://localhost:8080/api';
 
 async function testBackendConnection() {
   console.log('🧪 Testing Backend-Frontend Integration...\n');
@@ -9,7 +9,7 @@ async function testBackendConnection() {
   try {
     // Test 1: Check if backend is running
     console.log('1. Testing backend connectivity...');
-    const healthResponse = await axios.get('http://localhost:5000/');
+    const healthResponse = await axios.get('http://localhost:8080/');
     console.log('✅ Backend is running and accessible');
     
     // Test 2: Test API endpoint
@@ -35,7 +35,7 @@ async function testBackendConnection() {
   } catch (error) {
     console.error('\n❌ Integration test failed:', error.message);
     console.log('\n🔧 Troubleshooting:');
-    console.log('1. Make sure backend is running on port 5000');
+    console.log('1. Make sure backend is running on port 8080');
     console.log('2. Check if MongoDB is running');
     console.log('3. Verify all dependencies are installed');
   }

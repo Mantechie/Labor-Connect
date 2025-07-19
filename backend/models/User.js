@@ -19,7 +19,7 @@ const userSchema = new mongoose.Schema(
     },
     phone: {
       type: String,
-      required: true,
+      required: false, // Make phone optional for now
     },
     address: {
       type: String,

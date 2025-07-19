@@ -42,7 +42,7 @@ setTimeout(() => {
     
     console.log('\n✅ Both applications are starting...');
     console.log('🌐 Frontend will be available at: http://localhost:5173');
-    console.log('🔧 Backend API will be available at: http://localhost:5000/api');
+    console.log('🔧 Backend API will be available at: http://localhost:8080/api');
     console.log('\nPress Ctrl+C to stop both applications\n');
     
     // Handle graceful shutdown
