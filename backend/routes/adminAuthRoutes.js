@@ -1,5 +1,6 @@
 import express from 'express';
 import { protectAdmin } from '../middlewares/adminAuthMiddleware.js';
+import { upload } from '../middlewares/uploadMiddleware.js';
 import {
   registerAdmin,
   adminLogin,
@@ -7,7 +8,13 @@ import {
   verifyAdminOTP,
   refreshAdminToken,
   adminLogout,
-  getCurrentAdmin
+  getCurrentAdmin,
+  updateProfile,
+  changePassword,
+  uploadAdminProfilePicture,
+  getAdminCollaborators,
+  addAdminCollaborator,
+  removeAdminCollaborator
 } from '../controllers/adminAuthController.js';
 
 const router = express.Router();
@@ -61,5 +68,32 @@ router.get('/me', (req, res, next) => {
   console.log('🔍 Hitting /me route - PROTECTED');
   next();
 }, protectAdmin, getCurrentAdmin);
+
+// OTP routes for sensitive operations
+router.post('/generate-otp', (req, res, next) => {
+  console.log('🔍 Hitting /generate-otp route - PROTECTED');
+  next();
+}, protectAdmin, sendAdminOTP);
+
+// Profile management routes
+router.put('/profile', protectAdmin, updateProfile);
+router.put('/change-password', protectAdmin, changePassword);
+router.put('/profile-picture', protectAdmin, upload.single('profilePicture'), uploadAdminProfilePicture);
+
+// Collaboration routes
+router.get('/collaborators', (req, res, next) => {
+  console.log('🔍 Hitting /collaborators route - PROTECTED');
+  next();
+}, protectAdmin, getAdminCollaborators);
+
+router.post('/collaborator', (req, res, next) => {
+  console.log('🔍 Hitting /collaborator route - PROTECTED');
+  next();
+}, protectAdmin, addAdminCollaborator);
+
+router.delete('/collaborator/:id', (req, res, next) => {
+  console.log('🔍 Hitting /collaborator/:id route - PROTECTED');
+  next();
+}, protectAdmin, removeAdminCollaborator);
 
 export default router; 

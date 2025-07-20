@@ -85,6 +85,23 @@ const userSchema = new mongoose.Schema(
       workLicense: String,
       otherDocs: [String]
     },
+    documentStatus: {
+      aadhar: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+      },
+      idProof: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+      },
+      workLicense: {
+        type: String,
+        enum: ['pending', 'approved', 'rejected'],
+        default: 'pending'
+      }
+    },
 
     // Portfolio for laborers
     portfolio: [{
@@ -176,9 +193,170 @@ const userSchema = new mongoose.Schema(
       type: Boolean,
       default: true
     },
+    status: {
+      type: String,
+      enum: ['active', 'inactive', 'suspended', 'blocked'],
+      default: 'active'
+    },
+    statusReason: {
+      type: String,
+      default: null
+    },
+    blockedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin',
+      default: null
+    },
+    blockedAt: {
+      type: Date,
+      default: null
+    },
     lastActive: {
       type: Date,
       default: Date.now
+    },
+    lastLogin: {
+      type: Date,
+      default: null
+    },
+    loginCount: {
+      type: Number,
+      default: 0
+    },
+
+    // Activity tracking
+    activityLogs: [{
+      action: {
+        type: String,
+        required: true
+      },
+      details: {
+        type: String,
+        default: null
+      },
+      ipAddress: {
+        type: String,
+        default: null
+      },
+      userAgent: {
+        type: String,
+        default: null
+      },
+      timestamp: {
+        type: Date,
+        default: Date.now
+      }
+    }],
+
+    // Admin actions tracking
+    adminActions: [{
+      adminId: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Admin',
+        required: true
+      },
+      action: {
+        type: String,
+        required: true
+      },
+      details: {
+        type: String,
+        default: null
+      },
+      timestamp: {
+        type: Date,
+        default: Date.now
+      }
+    }],
+
+    // Verification and documents
+    isVerified: {
+      type: Boolean,
+      default: false
+    },
+    verificationDate: Date,
+    verifiedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin',
+      default: null
+    },
+    verificationNotes: {
+      type: String,
+      default: null
+    },
+
+    // Complaints and reports
+    complaintsReceived: [{
+      from: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+      },
+      reason: {
+        type: String,
+        required: true
+      },
+      details: {
+        type: String,
+        required: true
+      },
+      status: {
+        type: String,
+        enum: ['pending', 'investigating', 'resolved', 'dismissed'],
+        default: 'pending'
+      },
+      adminNotes: {
+        type: String,
+        default: null
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now
+      },
+      resolvedAt: {
+        type: Date,
+        default: null
+      }
+    }],
+
+    complaintsFiled: [{
+      against: {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'User',
+        required: true
+      },
+      reason: {
+        type: String,
+        required: true
+      },
+      details: {
+        type: String,
+        required: true
+      },
+      status: {
+        type: String,
+        enum: ['pending', 'investigating', 'resolved', 'dismissed'],
+        default: 'pending'
+      },
+      createdAt: {
+        type: Date,
+        default: Date.now
+      }
+    }],
+
+    // Soft delete fields
+    isDeleted: {
+      type: Boolean,
+      default: false
+    },
+    deletedAt: {
+      type: Date,
+      default: null
+    },
+    deletedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Admin',
+      default: null
     },
 
     otp: {

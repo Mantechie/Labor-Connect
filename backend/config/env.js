@@ -10,7 +10,7 @@ const config = {
   NODE_ENV: process.env.NODE_ENV || 'development',
   
   // MongoDB Configuration
-  MONGO_URI: process.env.MONGO_URI || 'mongodb://localhost:27017/labor-connect',
+  MONGO_URI: process.env.MONGO_URI || 'mongodb+srv://msnsnsharma2828:MongoDb%40manan28@cluster0.oqzytdh.mongodb.net/labourconnect?retryWrites=true&w=majority&appName=Cluster0',
   
   // JWT Configuration
   JWT_SECRET: process.env.JWT_SECRET || 'labor-connect-default-secret-key-change-in-production',

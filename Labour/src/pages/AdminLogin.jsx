@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '../Components/ToastContext';
 import adminAuthService from '../services/adminAuthService';
 import { 
@@ -15,6 +15,7 @@ import {
 
 const AdminLogin = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const { showToast } = useToast();
   
   const [formData, setFormData] = useState({
@@ -26,10 +27,20 @@ const AdminLogin = () => {
 
   useEffect(() => {
     // If admin is already logged in, redirect to admin dashboard
-    if (adminAuthService.isAuthenticated()) {
-      navigate('/admin/dashboard');
-    }
-  }, [navigate]);
+    const checkAdminAuth = async () => {
+      try {
+        const isValid = await adminAuthService.validateToken();
+        if (isValid) {
+          const from = location.state?.from?.pathname || '/admin/dashboard';
+          navigate(from, { replace: true });
+        }
+      } catch (error) {
+        console.error('Admin auth check error:', error);
+      }
+    };
+
+    checkAdminAuth();
+  }, [navigate, location]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -40,7 +51,10 @@ const AdminLogin = () => {
       const response = await adminAuthService.login(formData.email, formData.password);
       
       showToast('Admin login successful!', 'success');
-      navigate('/admin/dashboard');
+      
+      // Redirect to the intended destination or admin dashboard
+      const from = location.state?.from?.pathname || '/admin/dashboard';
+      navigate(from, { replace: true });
     } catch (error) {
       setError(error.message || 'Login failed');
       showToast(error.message || 'Login failed', 'danger');

@@ -2,10 +2,10 @@
 // Using bootstrap for styling 
 // import react module & useState hook which add state variable to component 
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../contexts/AuthContext';
-import axiosInstance from '../utils/axiosInstance';
 import { useToast } from './ToastContext';
 import { useNavigate } from 'react-router-dom';
+import adminAxiosInstance from '../utils/adminAxiosInstance';
+import adminAuthService from '../services/adminAuthService';
 
 // Array of object of  laborers with id,name,specialization,status
 const Laborers = [
@@ -28,26 +28,26 @@ const AdminDashboard = () => {
   const [loading, setLoading] = useState(false);
   const { showToast } = useToast();
   const navigate = useNavigate();
-  const { user } = useAuth();
+  const admin = adminAuthService.getStoredAdmin();
 
   // Restrict to admin only
   useEffect(() => {
-    if (!user || user.role !== 'admin') {
+    if (!admin || admin.role !== 'admin') {
       showToast('Access denied: Admins only', 'danger');
-      navigate('/login');
+      navigate('/admin/login');
     }
-  }, [user, navigate, showToast]);
+  }, [admin, navigate, showToast]);
 
   // Fetch job applications
   const fetchApplications = async () => {
     setLoading(true);
     try {
-      let url = '/applications';
+      let url = '/admin/applications';
       const params = [];
       if (statusFilter) params.push(`status=${statusFilter}`);
       if (search) params.push(`search=${encodeURIComponent(search)}`);
       if (params.length) url += '?' + params.join('&');
-      const res = await axiosInstance.get(url);
+      const res = await adminAxiosInstance.get(url);
       setApplications(res.data);
     } catch {
       showToast('Failed to fetch applications', 'danger');
@@ -65,7 +65,7 @@ const AdminDashboard = () => {
   const handleStatusChange = async (id, action) => {
     setLoading(true);
     try {
-      await axiosInstance.patch(`/applications/${id}/${action}`);
+      await adminAxiosInstance.patch(`/admin/applications/${id}/${action}`);
       showToast(`Application ${action}d`, 'success');
       fetchApplications();
     } catch {

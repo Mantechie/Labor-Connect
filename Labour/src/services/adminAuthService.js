@@ -18,7 +18,7 @@ class AdminAuthService {
         hasRefreshToken: !!response.data.admin?.refreshToken
       });
       
-      if (response.data.admin.token) {
+      if (response.data.admin && response.data.admin.token) {
         console.log('💾 Frontend: Storing admin tokens in localStorage');
         localStorage.setItem('adminToken', response.data.admin.token);
         localStorage.setItem('adminRefreshToken', response.data.admin.refreshToken);
@@ -29,6 +29,7 @@ class AdminAuthService {
         console.log('🔑 Frontend: adminRefreshToken length:', response.data.admin.refreshToken.length);
       } else {
         console.log('❌ Frontend: No token in response');
+        throw new Error('No authentication token received');
       }
       
       return response.data;
@@ -47,7 +48,7 @@ class AdminAuthService {
   async register(adminData) {
     try {
       const response = await adminAxiosInstance.post('/admin/auth/register', adminData);
-      if (response.data.admin.token) {
+      if (response.data.admin && response.data.admin.token) {
         localStorage.setItem('adminToken', response.data.admin.token);
         localStorage.setItem('adminRefreshToken', response.data.admin.refreshToken);
         localStorage.setItem('adminUser', JSON.stringify(response.data.admin));
@@ -75,7 +76,7 @@ class AdminAuthService {
   async verifyOTP(email, phone, otp) {
     try {
       const response = await adminAxiosInstance.post('/admin/auth/verify-otp', { email, phone, otp });
-      if (response.data.admin.token) {
+      if (response.data.admin && response.data.admin.token) {
         localStorage.setItem('adminToken', response.data.admin.token);
         localStorage.setItem('adminRefreshToken', response.data.admin.refreshToken);
         localStorage.setItem('adminUser', JSON.stringify(response.data.admin));
@@ -96,10 +97,14 @@ class AdminAuthService {
 
       const response = await adminAxiosInstance.post('/admin/auth/refresh', { refreshToken });
       
-      // Update tokens in localStorage
-      localStorage.setItem('adminToken', response.data.token);
-      localStorage.setItem('adminRefreshToken', response.data.refreshToken);
-      localStorage.setItem('adminUser', JSON.stringify(response.data.admin));
+      if (response.data.token) {
+        // Update tokens in localStorage
+        localStorage.setItem('adminToken', response.data.token);
+        localStorage.setItem('adminRefreshToken', response.data.refreshToken);
+        if (response.data.admin) {
+          localStorage.setItem('adminUser', JSON.stringify(response.data.admin));
+        }
+      }
       
       return response.data;
     } catch (error) {
@@ -139,8 +144,9 @@ class AdminAuthService {
   // Check if admin is authenticated
   isAuthenticated() {
     const hasToken = !!localStorage.getItem('adminToken');
-    console.log('🔍 Frontend: Admin authentication check:', { hasToken });
-    return hasToken;
+    const hasUser = !!localStorage.getItem('adminUser');
+    console.log('🔍 Frontend: Admin authentication check:', { hasToken, hasUser });
+    return hasToken && hasUser;
   }
 
   // Get stored admin user
@@ -155,6 +161,23 @@ class AdminAuthService {
   storeAdminAuthData(admin, token) {
     localStorage.setItem('adminUser', JSON.stringify(admin));
     localStorage.setItem('adminToken', token);
+  }
+
+  // Validate admin token
+  async validateToken() {
+    try {
+      const token = localStorage.getItem('adminToken');
+      if (!token) {
+        return false;
+      }
+
+      // Try to get current admin to validate token
+      await this.getCurrentAdmin();
+      return true;
+    } catch (error) {
+      console.log('Admin token validation failed:', error);
+      return false;
+    }
   }
 }
 

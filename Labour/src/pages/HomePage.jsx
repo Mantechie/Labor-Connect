@@ -167,6 +167,7 @@ const HomePage = () => {
             <span className="trust-badge bg-warning text-dark">🌟 Trusted by 10,000+ users</span>
           </div>
           <div className="d-flex flex-wrap justify-content-center gap-2 mt-2">
+            <Link to="/job-post" className="btn btn-success rounded-pill px-4 fw-semibold">Post Your Work</Link>
             <Link to="/signup" className="btn btn-outline-primary rounded-pill px-4 fw-semibold">Join as Laborer</Link>
           </div>
         </div>

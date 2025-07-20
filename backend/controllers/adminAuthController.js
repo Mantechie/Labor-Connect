@@ -5,6 +5,8 @@ import OTP from '../models/OTP.js';
 import generateOTP from '../utils/generateOTP.js';
 import sendEmail from '../utils/sendEmail.js';
 import dotenv from 'dotenv';
+import AdminLog from '../models/AdminLog.js';
+import sendSMS from '../utils/sendSMS.js'; // Added sendSMS import
 
 dotenv.config();
 
@@ -116,7 +118,13 @@ export const adminLogin = async (req, res) => {
       return res.status(400).json({ message: 'Admin account is deactivated' });
     }
 
-    console.log('🔍 Admin details:', {
+    // Check if account is locked
+    if (admin.isLocked()) {
+      console.log('❌ Admin account is locked');
+      return res.status(400).json({ message: 'Account is temporarily locked due to multiple failed attempts' });
+    }
+
+    console.log('�� Admin details:', {
       id: admin._id,
       adminId: admin.adminId,
       email: admin.email,
@@ -134,11 +142,32 @@ export const adminLogin = async (req, res) => {
     
     if (!isMatch) {
       console.log('❌ Password does not match');
+      
+      // Increment failed login attempts
+      await admin.incrementFailedLogin();
+      
+      // Log failed login attempt
+      await AdminLog.createLog({
+        adminId: admin._id,
+        action: 'FAILED_LOGIN_ATTEMPT',
+        details: 'Failed login attempt',
+        severity: 'MEDIUM',
+        status: 'FAILED',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+      
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
+    // Check if admin is already logged in
+    if (admin.isLoggedIn && admin.currentToken) {
+      console.log('⚠️ Admin already logged in, clearing previous session');
+      await admin.clearToken();
+    }
+
     // Update login stats
-    admin.updateLoginStats();
+    await admin.updateLoginStats();
 
     // Generate tokens
     const token = generateAdminToken(admin._id, admin.role);
@@ -151,12 +180,24 @@ export const adminLogin = async (req, res) => {
       refreshTokenStart: refreshToken.substring(0, 20) + '...'
     });
 
-    // Store refresh token
+    // Store tokens in database
+    await admin.setToken(token, 30); // 30 minutes expiry
     admin.refreshToken = refreshToken;
     await admin.save();
 
     // Log the login action
-    admin.logAction('login', 'system', null, 'Admin logged in successfully');
+    await admin.logAction('login', 'system', 'Admin logged in successfully');
+    
+    // Log successful login
+    await AdminLog.createLog({
+      adminId: admin._id,
+      action: 'LOGIN',
+      details: 'Successful login',
+      severity: 'LOW',
+      status: 'SUCCESS',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
 
     console.log('✅ Admin login successful:', admin.email);
 
@@ -441,35 +482,496 @@ export const refreshAdminToken = async (req, res) => {
 };
 
 // @desc    Admin logout
-// @route   POST /api/admin-auth/logout
-// @access  Private
+// @route   POST /api/admin/auth/logout
+// @access  Admin only
 export const adminLogout = async (req, res) => {
   try {
-    const adminId = req.user.id;
-
-    // Clear refresh token from admin document
-    await Admin.findByIdAndUpdate(adminId, { refreshToken: null });
+    const admin = await Admin.findById(req.admin._id);
+    
+    if (admin) {
+      // Clear tokens and session
+      await admin.clearToken();
+      
+      // Log the logout action
+      await AdminLog.createLog({
+        adminId: admin._id,
+        action: 'LOGOUT',
+        details: 'Admin logged out successfully',
+        severity: 'LOW',
+        status: 'SUCCESS',
+        ipAddress: req.ip,
+        userAgent: req.get('User-Agent')
+      });
+    }
 
     res.json({ message: 'Admin logged out successfully' });
   } catch (error) {
     console.error('Admin logout error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Failed to logout' });
   }
 };
 
 // @desc    Get current admin
-// @route   GET /api/admin-auth/me
-// @access  Private
+// @route   GET /api/admin/auth/me
+// @access  Admin only
 export const getCurrentAdmin = async (req, res) => {
   try {
-    const admin = await Admin.findById(req.user.id).select('-password');
+    const admin = await Admin.findById(req.admin._id).select('-password -refreshToken');
+    
     if (!admin) {
       return res.status(404).json({ message: 'Admin not found' });
     }
 
-    res.json({ admin });
+    res.json({
+      admin: admin
+    });
   } catch (error) {
     console.error('Get current admin error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Failed to get admin data' });
+  }
+};
+
+// Update admin profile
+export const updateProfile = async (req, res) => {
+  try {
+    const { name, email, phone, department, role } = req.body;
+    const adminId = req.admin.id;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+
+    // Check if any values have actually changed
+    const hasChanges = (
+      name !== admin.name ||
+      email !== admin.email ||
+      phone !== admin.phone ||
+      department !== admin.department ||
+      role !== admin.role
+    );
+
+    if (!hasChanges) {
+      return res.status(200).json({ 
+        message: 'No changes detected',
+        admin: {
+          id: admin._id,
+          name: admin.name,
+          email: admin.email,
+          phone: admin.phone,
+          department: admin.department,
+          role: admin.role,
+          profilePicture: admin.profilePicture,
+          isActive: admin.isActive,
+          isCollaborator: admin.isCollaborator,
+          permissions: admin.permissions
+        }
+      });
+    }
+
+    // If changes detected, check if OTP is provided and verified
+    const { otp } = req.body;
+    
+    if (!otp) {
+      // Generate and send OTP for verification
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      admin.otpCode = otpCode;
+      admin.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      admin.otpVerified = false;
+      admin.otpPurpose = 'profile_update';
+      admin.pendingChanges = { name, email, phone, department, role };
+      await admin.save();
+
+      // Send OTP via email and SMS
+      try {
+        await sendEmail({
+          to: admin.email,
+          subject: 'Admin Profile Update - OTP Verification',
+          html: `
+            <h2>🔐 Admin Profile Update Verification</h2>
+            <p>You have requested to update your admin profile.</p>
+            <p><strong>Your OTP Code: ${otpCode}</strong></p>
+            <p>This code will expire in 10 minutes.</p>
+            <p>If you didn't request this change, please contact the system administrator.</p>
+          `
+        });
+
+        await sendSMS({
+          to: admin.phone,
+          message: `Your admin profile update OTP is: ${otpCode}. Valid for 10 minutes.`
+        });
+
+        // Notify other admins
+        await notifyAdmins({
+          subject: 'Admin Profile Update Requested',
+          message: `Admin ${admin.name} (${admin.email}) has requested to update their profile. OTP verification required.`,
+          excludeAdminId: admin._id
+        });
+
+        // Log the action
+        await AdminLog.createLog({
+          adminId: admin._id,
+          action: 'PROFILE_UPDATE',
+          details: 'Profile update OTP generated',
+          severity: 'MEDIUM',
+          status: 'PENDING',
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent')
+        });
+
+        return res.status(200).json({
+          message: 'OTP sent to your email and phone for verification',
+          requiresOTP: true,
+          otpSent: true
+        });
+      } catch (error) {
+        console.error('Error sending OTP:', error);
+        return res.status(500).json({ message: 'Failed to send OTP' });
+      }
+    }
+
+    // Verify OTP
+    if (!admin.otpCode || admin.otpExpiry < new Date()) {
+      return res.status(400).json({ message: 'OTP expired or not found' });
+    }
+
+    if (admin.otpCode !== otp) {
+      return res.status(400).json({ message: 'Invalid OTP' });
+    }
+
+    // OTP verified, apply changes
+    admin.name = name;
+    admin.email = email;
+    admin.phone = phone;
+    admin.department = department;
+    admin.role = role;
+    admin.otpCode = null;
+    admin.otpExpiry = null;
+    admin.otpVerified = false;
+    admin.otpPurpose = null;
+    admin.pendingChanges = null;
+    await admin.save();
+
+    // Notify other admins of successful update
+    await notifyAdmins({
+      subject: 'Admin Profile Updated',
+      message: `Admin ${admin.name} (${admin.email}) has successfully updated their profile.`,
+      excludeAdminId: admin._id
+    });
+
+    // Log the successful action
+    await AdminLog.createLog({
+      adminId: admin._id,
+      action: 'PROFILE_UPDATE',
+      details: 'Profile updated successfully',
+      severity: 'MEDIUM',
+      status: 'SUCCESS',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
+    res.status(200).json({
+      message: 'Profile updated successfully',
+      admin: {
+        id: admin._id,
+        name: admin.name,
+        email: admin.email,
+        phone: admin.phone,
+        department: admin.department,
+        role: admin.role,
+        profilePicture: admin.profilePicture,
+        isActive: admin.isActive,
+        isCollaborator: admin.isCollaborator,
+        permissions: admin.permissions
+      }
+    });
+  } catch (error) {
+    console.error('Error updating profile:', error);
+    res.status(500).json({ message: 'Failed to update profile' });
+  }
+};
+
+// Change admin password
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword, otp } = req.body;
+    const adminId = req.admin.id;
+
+    const admin = await Admin.findById(adminId);
+    if (!admin) {
+      return res.status(404).json({ message: 'Admin not found' });
+    }
+
+    // Verify current password
+    const isPasswordValid = await bcrypt.compare(currentPassword, admin.password);
+    if (!isPasswordValid) {
+      return res.status(400).json({ message: 'Current password is incorrect' });
+    }
+
+    // Check if new password is different
+    const isNewPasswordDifferent = !(await bcrypt.compare(newPassword, admin.password));
+    
+    if (!isNewPasswordDifferent) {
+      return res.status(400).json({ message: 'New password must be different from current password' });
+    }
+
+    // If no OTP provided, generate and send OTP
+    if (!otp) {
+      const otpCode = Math.floor(100000 + Math.random() * 900000).toString();
+      admin.otpCode = otpCode;
+      admin.otpExpiry = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+      admin.otpVerified = false;
+      admin.otpPurpose = 'password_change';
+      admin.pendingChanges = { newPassword };
+      await admin.save();
+
+      // Send OTP via email and SMS
+      try {
+        await sendEmail({
+          to: admin.email,
+          subject: 'Admin Password Change - OTP Verification',
+          html: `
+            <h2>🔐 Admin Password Change Verification</h2>
+            <p>You have requested to change your admin password.</p>
+            <p><strong>Your OTP Code: ${otpCode}</strong></p>
+            <p>This code will expire in 10 minutes.</p>
+            <p>If you didn't request this change, please contact the system administrator immediately.</p>
+          `
+        });
+
+        await sendSMS({
+          to: admin.phone,
+          message: `Your admin password change OTP is: ${otpCode}. Valid for 10 minutes.`
+        });
+
+        // Notify other admins
+        await notifyAdmins({
+          subject: 'Admin Password Change Requested',
+          message: `Admin ${admin.name} (${admin.email}) has requested to change their password. OTP verification required.`,
+          excludeAdminId: admin._id
+        });
+
+        // Log the action
+        await AdminLog.createLog({
+          adminId: admin._id,
+          action: 'PASSWORD_CHANGE',
+          details: 'Password change OTP generated',
+          severity: 'HIGH',
+          status: 'PENDING',
+          ipAddress: req.ip,
+          userAgent: req.get('User-Agent')
+        });
+
+        return res.status(200).json({
+          message: 'OTP sent to your email and phone for verification',
+          requiresOTP: true,
+          otpSent: true
+        });
+      } catch (error) {
+        console.error('Error sending OTP:', error);
+        return res.status(500).json({ message: 'Failed to send OTP' });
+      }
+    }
+
+    // Verify OTP
+    if (!admin.otpCode || admin.otpExpiry < new Date()) {
+      return res.status(400).json({ message: 'OTP expired or not found' });
+    }
+
+    if (admin.otpCode !== otp) {
+      return res.status(400).json({ message: 'Invalid OTP' });
+    }
+
+    // OTP verified, change password
+    const salt = await bcrypt.genSalt(10);
+    admin.password = await bcrypt.hash(newPassword, salt);
+    admin.otpCode = null;
+    admin.otpExpiry = null;
+    admin.otpVerified = false;
+    admin.otpPurpose = null;
+    admin.pendingChanges = null;
+    
+    // Force logout all sessions
+    admin.currentToken = null;
+    admin.tokenExpiry = null;
+    admin.isLoggedIn = false;
+    await admin.save();
+
+    // Notify other admins of password change
+    await notifyAdmins({
+      subject: 'Admin Password Changed',
+      message: `Admin ${admin.name} (${admin.email}) has successfully changed their password. All sessions have been terminated.`,
+      excludeAdminId: admin._id
+    });
+
+    // Log the successful action
+    await AdminLog.createLog({
+      adminId: admin._id,
+      action: 'PASSWORD_CHANGE',
+      details: 'Password changed successfully',
+      severity: 'HIGH',
+      status: 'SUCCESS',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
+
+    res.status(200).json({
+      message: 'Password changed successfully. Please login again.',
+      logoutRequired: true
+    });
+  } catch (error) {
+    console.error('Error changing password:', error);
+    res.status(500).json({ message: 'Failed to change password' });
+  }
+};
+
+// @desc    Upload admin profile picture
+// @route   PUT /api/admin/auth/profile-picture
+// @access  Admin only
+export const uploadAdminProfilePicture = async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'Profile picture is required' });
+    }
+    
+    // Validate file type
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
+    if (!allowedTypes.includes(req.file.mimetype)) {
+      return res.status(400).json({ message: 'Only JPEG, PNG, and GIF images are allowed' });
+    }
+    
+    // Validate file size (5MB max)
+    if (req.file.size > 5 * 1024 * 1024) {
+      return res.status(400).json({ message: 'File size must be less than 5MB' });
+    }
+    
+    const profilePicture = `/uploads/admin/${req.file.filename}`;
+    
+    const updatedAdmin = await Admin.findByIdAndUpdate(
+      req.admin._id,
+      { profilePicture },
+      { new: true }
+    ).select('-password -refreshToken');
+    
+    // Log the action
+    updatedAdmin.logAction('profile_picture_update', 'self', 'Profile picture updated');
+    
+    res.json({
+      message: 'Profile picture updated successfully',
+      profilePicture: updatedAdmin.profilePicture
+    });
+  } catch (error) {
+    console.error('Upload admin profile picture error:', error);
+    res.status(500).json({ message: 'Failed to upload profile picture' });
+  }
+};
+
+// @desc    Get admin collaborators
+// @route   GET /api/admin/auth/collaborators
+// @access  Admin only
+export const getAdminCollaborators = async (req, res) => {
+  try {
+    const collaborators = await Admin.getActiveCollaborators();
+    
+    res.json({
+      admins: collaborators,
+      total: collaborators.length,
+      limit: 2
+    });
+  } catch (error) {
+    console.error('Get admin collaborators error:', error);
+    res.status(500).json({ message: 'Failed to get collaborators' });
+  }
+};
+
+// @desc    Add admin collaborator (super admin only)
+// @route   POST /api/admin/auth/collaborator
+// @access  Super Admin only
+export const addAdminCollaborator = async (req, res) => {
+  try {
+    // Check if current admin is super admin
+    if (req.admin.role !== 'super_admin') {
+      return res.status(403).json({ message: 'Only super admin can add collaborators' });
+    }
+    
+    // Check collaboration limit
+    const canAdd = await Admin.canAddCollaborator();
+    if (!canAdd) {
+      return res.status(400).json({ message: 'Maximum 2 collaborators allowed' });
+    }
+    
+    const { name, email, phone, password, department } = req.body;
+    
+    // Create new admin collaborator
+    const newCollaborator = new Admin({
+      name,
+      email,
+      phone,
+      password,
+      department: department || 'general',
+      role: 'admin',
+      isCollaborator: true,
+      permissions: ['manage_users', 'manage_laborers', 'view_analytics']
+    });
+    
+    await newCollaborator.save();
+    
+    // Log the action
+    req.admin.logAction('add_collaborator', newCollaborator._id, `Added collaborator: ${newCollaborator.name}`);
+    
+    res.status(201).json({
+      message: 'Collaborator added successfully',
+      admin: {
+        id: newCollaborator._id,
+        name: newCollaborator.name,
+        email: newCollaborator.email,
+        role: newCollaborator.role,
+        department: newCollaborator.department
+      }
+    });
+  } catch (error) {
+    console.error('Add admin collaborator error:', error);
+    res.status(500).json({ message: 'Failed to add collaborator' });
+  }
+};
+
+// @desc    Remove admin collaborator (super admin only)
+// @route   DELETE /api/admin/auth/collaborator/:id
+// @access  Super Admin only
+export const removeAdminCollaborator = async (req, res) => {
+  try {
+    // Check if current admin is super admin
+    if (req.admin.role !== 'super_admin') {
+      return res.status(403).json({ message: 'Only super admin can remove collaborators' });
+    }
+    
+    const collaboratorId = req.params.id;
+    
+    // Prevent removing self
+    if (collaboratorId === req.admin._id.toString()) {
+      return res.status(400).json({ message: 'Cannot remove yourself' });
+    }
+    
+    const collaborator = await Admin.findById(collaboratorId);
+    if (!collaborator) {
+      return res.status(404).json({ message: 'Collaborator not found' });
+    }
+    
+    if (!collaborator.isCollaborator) {
+      return res.status(400).json({ message: 'User is not a collaborator' });
+    }
+    
+    // Deactivate collaborator
+    collaborator.isActive = false;
+    collaborator.isCollaborator = false;
+    await collaborator.save();
+    
+    // Log the action
+    req.admin.logAction('remove_collaborator', collaboratorId, `Removed collaborator: ${collaborator.name}`);
+    
+    res.json({ message: 'Collaborator removed successfully' });
+  } catch (error) {
+    console.error('Remove admin collaborator error:', error);
+    res.status(500).json({ message: 'Failed to remove collaborator' });
   }
 }; 

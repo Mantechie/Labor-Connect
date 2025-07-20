@@ -115,7 +115,6 @@ const Header = () => {
               <>
                 <Nav.Link as={NavLink} to="/job-listings" onClick={() => setExpanded(false)}>🛠️ {t.jobs}</Nav.Link>
                 <Nav.Link as={NavLink} to="/laborer-profile" onClick={() => setExpanded(false)}>👷‍♂️ {t.findLabour}</Nav.Link>
-                <Nav.Link as={NavLink} to="/job-post" onClick={() => setExpanded(false)}>➕ {t.postWork}</Nav.Link>
               </>
             )}
             {user && user.role === 'user' && (

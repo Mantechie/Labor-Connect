@@ -11,6 +11,8 @@ import laborerRoutes from './routes/laborerRoutes.js'
 import jobRoutes from './routes/jobRoutes.js'
 import adminRoutes from './routes/adminRoutes.js'
 import adminAuthRoutes from './routes/adminAuthRoutes.js'
+import userManagementRoutes from './routes/userManagementRoutes.js'
+import laborerManagementRoutes from './routes/laborerManagementRoutes.js'
 import reviewRoutes from './routes/reviewRoutes.js'
 import chatRoutes from './routes/chatRoutes.js'
 import categoryRoutes from './routes/categoryRoutes.js';
@@ -80,6 +82,16 @@ app.use('/api/admin', (req, res, next) => {
   console.log('🔍 Admin Route:', req.method, req.originalUrl);
   next();
 }, adminRoutes);
+
+app.use('/api/admin/users', (req, res, next) => {
+  console.log('🔍 User Management Route:', req.method, req.originalUrl);
+  next();
+}, userManagementRoutes);
+
+app.use('/api/laborers/management', (req, res, next) => {
+  console.log('🔍 Laborer Management Route:', req.method, req.originalUrl);
+  next();
+}, laborerManagementRoutes);
 
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/chats', chatRoutes);

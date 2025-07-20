@@ -1,6 +1,6 @@
 // src/App.jsx
 import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 
 // Layout Components
 import Header from './Components/Header';
@@ -26,6 +26,7 @@ import LaborerDashboard from './pages/LaborerDashboard';
 import UserDashboard from './pages/UserDashboard';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
+import AdminProfile from './pages/AdminProfile';
 
 // Features
 import JobListing from './Components/JobListing';
@@ -36,75 +37,146 @@ import ChatInterface from './Components/ChatInterface';
 import './styles/App.css';
 import './styles/components.css';
 
+// Component to conditionally render layout
+const AppLayout = ({ children }) => {
+  const location = useLocation();
+  const isAdminRoute = location.pathname.startsWith('/admin');
+  
+  if (isAdminRoute) {
+    // Admin routes - no header/footer
+    return <main className="flex-fill">{children}</main>;
+  }
+  
+  // Regular routes - with header/footer
+  return (
+    <>
+      <Header />
+      <main className="flex-fill">{children}</main>
+      <Footer />
+    </>
+  );
+};
+
 const App = () => {
   return (
     <AuthProvider>
       <ToastProvider>
         <Router>
           <div className="d-flex flex-column min-vh-100">
-            <Header />
-            <main className="flex-fill">
-              <Routes>
-                <Route path="/" element={<HomePage />} />
-                <Route path="/signup" element={<SignupPage />} />
-                <Route path="/login" element={<LoginPage />} />
-                <Route path="/otp-login" element={<OTPLoginPage />} />
-                <Route path="/otp-verification" element={<OTPVerificationPage />} />
-                <Route path="/test-otp" element={<TestOTP />} />
-                
-                {/* Admin Routes - Must come before other protected routes */}
-                <Route path="/admin/login" element={<AdminLogin />} />
-                <Route path="/admin/dashboard" element={
-                  <AdminProtectedRoute>
-                    <AdminDashboard />
-                  </AdminProtectedRoute>
-                } />
-                <Route path="/admin-login" element={<AdminLogin />} />
-                
-                {/* User Protected Routes */}
-                <Route path="/profile" element={
+            <Routes>
+              <Route path="/" element={
+                <AppLayout>
+                  <HomePage />
+                </AppLayout>
+              } />
+              <Route path="/signup" element={
+                <AppLayout>
+                  <SignupPage />
+                </AppLayout>
+              } />
+              <Route path="/login" element={
+                <AppLayout>
+                  <LoginPage />
+                </AppLayout>
+              } />
+              <Route path="/otp-login" element={
+                <AppLayout>
+                  <OTPLoginPage />
+                </AppLayout>
+              } />
+              <Route path="/otp-verification" element={
+                <AppLayout>
+                  <OTPVerificationPage />
+                </AppLayout>
+              } />
+              <Route path="/test-otp" element={
+                <AppLayout>
+                  <TestOTP />
+                </AppLayout>
+              } />
+              
+              {/* Admin Routes - No Header/Footer */}
+              <Route path="/admin/login" element={<AdminLogin />} />
+              <Route path="/admin/dashboard" element={
+                <AdminProtectedRoute>
+                  <AdminDashboard />
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin/profile" element={
+                <AdminProtectedRoute>
+                  <AdminProfile />
+                </AdminProtectedRoute>
+              } />
+              <Route path="/admin-login" element={<AdminLogin />} />
+              
+              {/* User Protected Routes */}
+              <Route path="/profile" element={
+                <AppLayout>
                   <ProtectedRoute>
                     <UserProfile />
                   </ProtectedRoute>
-                } />
-                <Route path="/job-post" element={
+                </AppLayout>
+              } />
+              <Route path="/job-post" element={
+                <AppLayout>
                   <ProtectedRoute>
                     <JobPostPage />
                   </ProtectedRoute>
-                } />
-                <Route path="/chat" element={
+                </AppLayout>
+              } />
+              <Route path="/chat" element={
+                <AppLayout>
                   <ProtectedRoute>
                     <ChatInterface />
                   </ProtectedRoute>
-                } />
-                <Route path="/browse-laborers" element={
+                </AppLayout>
+              } />
+              <Route path="/browse-laborers" element={
+                <AppLayout>
                   <ProtectedRoute>
                     <BrowseLaborers />
                   </ProtectedRoute>
-                } />
-                <Route path="/job-management" element={
+                </AppLayout>
+              } />
+              <Route path="/job-management" element={
+                <AppLayout>
                   <ProtectedRoute>
                     <JobManagement />
                   </ProtectedRoute>
-                } />
-                <Route path="/laborer-dashboard" element={
+                </AppLayout>
+              } />
+              <Route path="/laborer-dashboard" element={
+                <AppLayout>
                   <ProtectedRoute>
                     <LaborerDashboard />
                   </ProtectedRoute>
-                } />
-                <Route path="/user-dashboard" element={
+                </AppLayout>
+              } />
+              <Route path="/user-dashboard" element={
+                <AppLayout>
                   <ProtectedRoute>
                     <UserDashboard />
                   </ProtectedRoute>
-                } />
-                
-                {/* Public Routes */}
-                <Route path="/job-listings" element={<JobListing />} />
-                <Route path="/laborer-profile" element={<LaborerProfile />} />
-                <Route path="/help" element={<HelpPage />} />
-              </Routes>
-            </main>
-            <Footer />
+                </AppLayout>
+              } />
+              
+              {/* Public Routes */}
+              <Route path="/job-listings" element={
+                <AppLayout>
+                  <JobListing />
+                </AppLayout>
+              } />
+              <Route path="/laborer-profile" element={
+                <AppLayout>
+                  <LaborerProfile />
+                </AppLayout>
+              } />
+              <Route path="/help" element={
+                <AppLayout>
+                  <HelpPage />
+                </AppLayout>
+              } />
+            </Routes>
           </div>
         </Router>
       </ToastProvider>

@@ -46,20 +46,22 @@ export const protectAdmin = asyncHandler(async (req, res, next) => {
         throw new Error('Admin not found')
       }
 
-      console.log('✅ Admin Middleware: Admin found:', {
-        id: req.admin._id,
-        adminId: req.admin.adminId,
-        email: req.admin.email,
-        role: req.admin.role,
-        isActive: req.admin.isActive
-      });
-
       // Check if admin is active
       if (!req.admin.isActive) {
         console.log('❌ Admin Middleware: Admin account is deactivated');
         res.status(401)
         throw new Error('Admin account is deactivated')
       }
+
+      // Verify token is stored in database and valid
+      if (!req.admin.isTokenValid(token)) {
+        console.log('❌ Admin Middleware: Token not valid in database');
+        res.status(401)
+        throw new Error('Token not valid or expired')
+      }
+
+      // Update last activity
+      await req.admin.updateActivity();
 
       console.log('✅ Admin Middleware: Authentication successful');
       next()
@@ -108,5 +110,25 @@ export const hasPermission = (permission) => {
       res.status(403)
       throw new Error(`Not authorized for ${permission} permission`)
     }
+  }
+}
+
+// 🛡 Check if admin is logged in (for OTP operations)
+export const requireLoggedInAdmin = (req, res, next) => {
+  if (req.admin && req.admin.isLoggedIn) {
+    next()
+  } else {
+    res.status(401)
+    throw new Error('Admin must be logged in')
+  }
+}
+
+// 🛡 Check if admin has verified OTP (for sensitive operations)
+export const requireOTPVerification = (req, res, next) => {
+  if (req.admin && req.admin.otpVerified) {
+    next()
+  } else {
+    res.status(401)
+    throw new Error('OTP verification required')
   }
 } 
