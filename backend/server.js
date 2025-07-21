@@ -17,6 +17,7 @@ import reviewRoutes from './routes/reviewRoutes.js'
 import chatRoutes from './routes/chatRoutes.js'
 import categoryRoutes from './routes/categoryRoutes.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js'
+import { corsDebugMiddleware, credentialsMiddleware, preflightHandler, validateCorsOrigin } from './middlewares/corsMiddleware.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import reportRoutes from './routes/reportRoutes.js';
@@ -39,12 +40,50 @@ app.set('views', path.join(__dirname, 'views'))
 
 // Middleware
 app.use(express.json()) // For JSON body parsing
+
+// CORS Debug Middleware (development only)
+if (config.NODE_ENV === 'development') {
+  app.use(corsDebugMiddleware);
+}
+
+// Enhanced CORS Configuration
 app.use(cors({
-  origin: config.CORS_ORIGIN,
+  origin: function (origin, callback) {
+    if (validateCorsOrigin(origin)) {
+      return callback(null, true);
+    }
+    const allowedOrigins = [
+        'http://localhost:5173',
+        'http://localhost:8080',
+        'https://labour-phi.vercel.app/',
+        'https://labor-connect.onrender.com'
+    ]
+    const error = new Error(`CORS policy violation: Origin ${origin} not allowed`);
+    console.error(`❌ CORS Error: ${error.message}`);
+    return callback(error);
+  },
   credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization']
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
+  allowedHeaders: [
+    'Origin',
+    'X-Requested-With',
+    'Content-Type',
+    'Accept',
+    'Authorization',
+    'Cache-Control',
+    'X-HTTP-Method-Override',
+    'X-Forwarded-For',
+    'X-Real-IP'
+  ],
+  exposedHeaders: ['Content-Length', 'X-Total-Count', 'X-Page-Count'],
+  maxAge: 86400, // 24 hours
+  preflightContinue: false,
+  optionsSuccessStatus: 200
 }))
+
+// Additional CORS and security middleware
+app.use(credentialsMiddleware);
+app.use(preflightHandler);
 
 // Use different logging based on environment
 if (process.env.NODE_ENV === 'production') {

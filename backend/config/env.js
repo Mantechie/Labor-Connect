@@ -32,8 +32,8 @@ const config = {
   UPLOAD_PATH: process.env.UPLOAD_PATH || './uploads',
   MAX_FILE_SIZE: process.env.MAX_FILE_SIZE || 5242880, // 5MB
   
-  // CORS Configuration
-  CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:5173',
+  // CORS Configuration - supports multiple origins separated by commas
+  CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:3000,http://localhost:5174,https://example.com',
   
   // Redis Configuration (for sessions/caching)
   REDIS_URL: process.env.REDIS_URL || '',
