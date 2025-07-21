@@ -19,34 +19,12 @@ import {
 
 const router = express.Router();
 
-// Debug middleware for admin routes
-router.use((req, res, next) => {
-  console.log('🔍 Admin Auth Route Debug:', {
-    method: req.method,
-    path: req.path,
-    originalUrl: req.originalUrl,
-    url: req.url,
-    baseUrl: req.baseUrl,
-    body: req.body
-  });
-  next();
-});
+// Production-ready routes without debug logs
 
 // Public routes - NO middleware applied
-router.post('/register', (req, res, next) => {
-  console.log('🔍 Hitting /register route');
-  next();
-}, registerAdmin);
-
-router.post('/login', (req, res, next) => {
-  console.log('🔍 Hitting /login route - PUBLIC');
-  next();
-}, adminLogin);
-
-router.post('/send-otp', (req, res, next) => {
-  console.log('🔍 Hitting /send-otp route');
-  next();
-}, sendAdminOTP);
+router.post('/register', registerAdmin);
+router.post('/login', adminLogin);
+router.post('/send-otp', sendAdminOTP);
 
 router.post('/verify-otp', (req, res, next) => {
   console.log('🔍 Hitting /verify-otp route');

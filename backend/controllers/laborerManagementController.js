@@ -13,7 +13,7 @@ const notifyAdmins = async ({ subject, message, excludeAdminId }) => {
     });
     
     if (admins.length === 0) {
-      console.log('No other admins to notify');
+      // No other admins to notify
       return;
     }
     
@@ -43,7 +43,7 @@ const notifyAdmins = async ({ subject, message, excludeAdminId }) => {
       }
     }
     
-    console.log(`✅ Notified ${admins.length} admins`);
+    // Notified admins successfully
   } catch (error) {
     console.error('Error in notifyAdmins:', error);
   }

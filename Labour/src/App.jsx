@@ -27,6 +27,7 @@ import UserDashboard from './pages/UserDashboard';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminProfile from './pages/AdminProfile';
+import ErrorBoundary from './Components/ErrorBoundary';
 
 // Features
 import JobListing from './Components/JobListing';
@@ -98,9 +99,11 @@ const App = () => {
               {/* Admin Routes - No Header/Footer */}
               <Route path="/admin/login" element={<AdminLogin />} />
               <Route path="/admin/dashboard" element={
-                <AdminProtectedRoute>
-                  <AdminDashboard />
-                </AdminProtectedRoute>
+                <ErrorBoundary>
+                  <AdminProtectedRoute>
+                    <AdminDashboard />
+                  </AdminProtectedRoute>
+                </ErrorBoundary>
               } />
               <Route path="/admin/profile" element={
                 <AdminProtectedRoute>

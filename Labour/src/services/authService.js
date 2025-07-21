@@ -4,7 +4,7 @@ class AuthService {
   // Login user
   async login(email, password) {
     try {
-      const response = await axiosInstance.post('/auth/login', { email, password });
+      const response = await axiosInstance.post('/api/auth/login', { email, password });
       if (response.data.user.token) {
         localStorage.setItem('token', response.data.user.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -21,7 +21,7 @@ class AuthService {
   // Register user
   async register(userData) {
     try {
-      const response = await axiosInstance.post('/auth/register', userData);
+      const response = await axiosInstance.post('/api/auth/register', userData);
       if (response.data.user.token) {
         localStorage.setItem('token', response.data.user.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -38,20 +38,18 @@ class AuthService {
   // Send OTP
   async sendOTP(email, phone) {
     try {
-      console.log('🔍 Sending OTP request:', { email, phone });
-      const response = await axiosInstance.post('/auth/send-otp', { email, phone });
-      console.log('✅ OTP response:', response.data);
+      const response = await axiosInstance.post('/api/auth/send-otp', { email, phone });
       return response.data;
     } catch (error) {
-      console.error('❌ OTP error:', error);
-      throw error.response?.data || error.message;
+      const errorMessage = error.response?.data?.message || 'Failed to send OTP. Please try again.';
+      throw new Error(errorMessage);
     }
   }
 
   // Verify OTP
   async verifyOTP(email, phone, otp) {
     try {
-      const response = await axiosInstance.post('/auth/verify-otp', { email, phone, otp });
+      const response = await axiosInstance.post('/api/auth/verify-otp', { email, phone, otp });
       if (response.data.user.token) {
         localStorage.setItem('token', response.data.user.token);
         localStorage.setItem('user', JSON.stringify(response.data.user));
@@ -68,7 +66,7 @@ class AuthService {
   // Reset password
   async resetPassword(email, otp, newPassword) {
     try {
-      const response = await axiosInstance.post('/auth/reset-password', { 
+      const response = await axiosInstance.post('/api/auth/reset-password', { 
         email, 
         otp, 
         newPassword 
@@ -82,7 +80,7 @@ class AuthService {
   // Get current user
   async getCurrentUser() {
     try {
-      const response = await axiosInstance.get('/auth/me');
+      const response = await axiosInstance.get('/api/auth/me');
       return response.data;
     } catch (error) {
       throw error.response?.data || error.message;
@@ -94,10 +92,10 @@ class AuthService {
     try {
       const token = localStorage.getItem('token');
       if (token) {
-        await axiosInstance.post('/auth/logout');
+        await axiosInstance.post('/api/auth/logout');
       }
     } catch (error) {
-      console.error('Logout error:', error);
+      // Silently handle logout errors
     } finally {
       // Clear all auth data
       localStorage.removeItem('token');

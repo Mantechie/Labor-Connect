@@ -204,7 +204,7 @@ export const sendOtp = async (req, res) => {
         // Add preview URL for development
         if (emailResult && emailResult.previewUrl) {
           responseData.previewUrl = emailResult.previewUrl;
-          console.log(`🔗 Email Preview URL: ${emailResult.previewUrl}`);
+          // Email sent successfully
         }
         
         res.status(200).json(responseData);

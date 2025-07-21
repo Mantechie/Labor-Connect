@@ -11,8 +11,13 @@ export const notFound = (req, res, next) => {
 export const errorHandler = (err, req, res, next) => {
   const statusCode = res.statusCode === 200 ? 500 : res.statusCode
 
+  // In production, send generic error messages
+  const message = process.env.NODE_ENV === 'production' 
+    ? 'Something went wrong. Please try again.' 
+    : err.message;
+
   res.status(statusCode).json({
-    message: err.message,
+    message,
     stack: process.env.NODE_ENV === 'production' ? null : err.stack,
   })
 }

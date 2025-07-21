@@ -15,7 +15,7 @@ const notifyAdmins = async ({ subject, message, excludeAdminId }) => {
     });
     
     if (admins.length === 0) {
-      console.log('No other admins to notify');
+      // No other admins to notify
       return;
     }
     

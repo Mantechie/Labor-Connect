@@ -90,58 +90,33 @@ export const registerAdmin = async (req, res) => {
 // @access  Public
 export const adminLogin = async (req, res) => {
   try {
-    console.log('🔍 Admin login attempt:', { 
-      email: req.body.email,
-      hasPassword: !!req.body.password,
-      bodyKeys: Object.keys(req.body)
-    });
-    
     const { email, password } = req.body;
 
     if (!email || !password) {
-      console.log('❌ Missing email or password');
       return res.status(400).json({ message: 'Email and password are required' });
     }
 
     // Find admin by email
     const admin = await Admin.findOne({ email }).select('+password');
-    console.log('🔍 Admin found:', admin ? 'Yes' : 'No');
     
     if (!admin) {
-      console.log('❌ Admin not found for email:', email);
       return res.status(400).json({ message: 'Invalid email or password' });
     }
 
     // Check if admin is active
     if (!admin.isActive) {
-      console.log('❌ Admin account is deactivated');
       return res.status(400).json({ message: 'Admin account is deactivated' });
     }
 
     // Check if account is locked
     if (admin.isLocked()) {
-      console.log('❌ Admin account is locked');
       return res.status(400).json({ message: 'Account is temporarily locked due to multiple failed attempts' });
     }
 
-    console.log('�� Admin details:', {
-      id: admin._id,
-      adminId: admin.adminId,
-      email: admin.email,
-      hasPassword: !!admin.password,
-      passwordLength: admin.password ? admin.password.length : 0,
-      isActive: admin.isActive,
-      role: admin.role
-    });
-
     // Compare passwords
     const isMatch = await bcrypt.compare(password, admin.password);
-    console.log('🔐 Password match:', isMatch);
-    console.log('🔐 Input password:', password);
-    console.log('🔐 Stored password hash:', admin.password ? admin.password.substring(0, 20) + '...' : 'null');
     
     if (!isMatch) {
-      console.log('❌ Password does not match');
       
       // Increment failed login attempts
       await admin.incrementFailedLogin();
@@ -162,7 +137,6 @@ export const adminLogin = async (req, res) => {
 
     // Check if admin is already logged in
     if (admin.isLoggedIn && admin.currentToken) {
-      console.log('⚠️ Admin already logged in, clearing previous session');
       await admin.clearToken();
     }
 
@@ -172,13 +146,6 @@ export const adminLogin = async (req, res) => {
     // Generate tokens
     const token = generateAdminToken(admin._id, admin.role);
     const refreshToken = generateAdminRefreshToken(admin._id);
-
-    console.log('🔑 Generated tokens:', {
-      tokenLength: token.length,
-      refreshTokenLength: refreshToken.length,
-      tokenStart: token.substring(0, 20) + '...',
-      refreshTokenStart: refreshToken.substring(0, 20) + '...'
-    });
 
     // Store tokens in database
     await admin.setToken(token, 30); // 30 minutes expiry
@@ -199,7 +166,7 @@ export const adminLogin = async (req, res) => {
       userAgent: req.get('User-Agent')
     });
 
-    console.log('✅ Admin login successful:', admin.email);
+
 
     const responseData = {
       message: 'Admin login successful',
@@ -219,17 +186,9 @@ export const adminLogin = async (req, res) => {
       },
     };
 
-    console.log('📤 Sending response with admin data:', {
-      hasToken: !!responseData.admin.token,
-      hasRefreshToken: !!responseData.admin.refreshToken,
-      adminId: responseData.admin.adminId
-    });
-
     res.status(200).json(responseData);
   } catch (err) {
-    console.error('❌ Admin login error:', err);
-    console.error('❌ Error stack:', err.stack);
-    res.status(500).json({ message: err.message });
+    res.status(500).json({ message: 'Login failed. Please try again.' });
   }
 };
 
@@ -312,7 +271,7 @@ export const sendAdminOTP = async (req, res) => {
 
         if (emailResult && emailResult.previewUrl) {
           responseData.previewUrl = emailResult.previewUrl;
-          console.log(`🔗 Admin Email Preview URL: ${emailResult.previewUrl}`);
+          // Email sent successfully
         }
 
         res.status(200).json(responseData);

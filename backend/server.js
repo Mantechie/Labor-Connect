@@ -45,7 +45,13 @@ app.use(cors({
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization']
 }))
-app.use(morgan('dev'))
+
+// Use different logging based on environment
+if (process.env.NODE_ENV === 'production') {
+  app.use(morgan('combined'));
+} else {
+  app.use(morgan('dev'));
+}
 
 // Serve static files
 app.use('/uploads', express.static('uploads'))
@@ -60,23 +66,14 @@ app.get('/api/health', (req, res) => {
 });
 
 // API Routes
-console.log('🔧 Mounting API routes...');
-
-app.use('/api/auth', (req, res, next) => {
-  console.log('🔍 Regular Auth Route:', req.method, req.originalUrl);
-  next();
-}, authRoutes);
-
+app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/laborers', laborerRoutes);
 app.use('/api/jobs', jobRoutes);
 
 // IMPORTANT: Mount admin auth routes BEFORE admin routes
 // This prevents the admin middleware from being applied to auth routes
-app.use('/api/admin/auth', (req, res, next) => {
-  console.log('🔍 Admin Auth Route:', req.method, req.originalUrl);
-  next();
-}, adminAuthRoutes);
+app.use('/api/admin/auth', adminAuthRoutes);
 
 app.use('/api/admin', (req, res, next) => {
   console.log('🔍 Admin Route:', req.method, req.originalUrl);
