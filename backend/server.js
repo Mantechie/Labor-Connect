@@ -80,7 +80,7 @@ app.use(cors({
   preflightContinue: false,
   optionsSuccessStatus: 200
 }))
-
+app.options('*', cors());
 // Additional CORS and security middleware
 app.use(credentialsMiddleware);
 app.use(preflightHandler);
