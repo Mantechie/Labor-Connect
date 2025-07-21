@@ -682,7 +682,7 @@ const UserManagement = () => {
     <div className="user-management">
       {/* Header */}
       <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2>👥 Customer User Management</h2>
+        <h2>👥 User Management</h2>
         <div className="d-flex gap-2">
           <Button variant="outline-success" onClick={handleExportUsers}>
             📊 Export CSV
