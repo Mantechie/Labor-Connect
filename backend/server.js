@@ -141,7 +141,7 @@ app.use(notFound)
 app.use(errorHandler)
 
 // Server Start
-const PORT = process.env.PORT || 8080
+const PORT = process.env.PORT
 server.listen(PORT, () => {
   console.log(`🚀 Server running in ${config.NODE_ENV} mode on port ${config.PORT}`)
   console.log(`📧 Email configured: ${config.EMAIL_USER ? 'Yes' : 'No'}`)
