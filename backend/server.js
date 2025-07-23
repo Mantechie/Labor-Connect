@@ -91,27 +91,20 @@ app.use(cors({
     'Accept-Language',
     'Accept-Encoding'
   ],
-<<<<<<< HEAD
   exposedHeaders: [
     'X-Total-Count',
     'X-Page-Count',
     'X-Current-Page',
-    'X-Per-Page'
+    'X-Per-Page',
+    'Content-Length'
   ],
   maxAge: config.CORS_MAX_AGE,
   optionsSuccessStatus: 204 // Some legacy browsers choke on 204
 }));
-=======
-  exposedHeaders: ['Content-Length', 'X-Total-Count', 'X-Page-Count'],
-  maxAge: 86400, // 24 hours
-  preflightContinue: false,
-  optionsSuccessStatus: 200
-}))
-app.options('*', cors());
+
 // Additional CORS and security middleware
 app.use(credentialsMiddleware);
 app.use(preflightHandler);
->>>>>>> c2055def70b37c2a0a34873cb8cfb55cd2689b64
 
 // Use different logging based on environment
 if (process.env.NODE_ENV === 'production') {
