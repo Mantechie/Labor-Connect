@@ -10,12 +10,16 @@ import {
   addPortfolioItem,
   getEarnings,
   getCompletedJobs,
+  browseLaborers,
   upload
 } from '../controllers/laborerController.js';
 
 const router = express.Router();
 
-// All routes require authentication
+// Browse route should be public (no authentication required)
+router.get('/browse', browseLaborers);
+
+// All other routes require authentication
 router.use(protect);
 
 // Job management routes
@@ -41,5 +45,7 @@ router.post('/portfolio', upload.single('image'), addPortfolioItem);
 
 // Earnings routes
 router.get('/earnings', getEarnings);
+
+
 
 export default router;

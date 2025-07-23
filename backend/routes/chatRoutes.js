@@ -14,9 +14,8 @@ const router = express.Router()
 // 📌 POST /api/chats - Start new conversation between user & laborer
 router.post('/', protect, sendMessage)
 
-// In chatRoutes.js
-router.get('/', protect, getMessagesBetweenUsers)
-
+// 📌 GET /api/chats - Get messages between specific users
+router.get('/messages', protect, getMessagesBetweenUsers)
 
 // 📌 GET /api/chats - Get all chats of logged-in user/laborer
 router.get('/', protect, getUserChatHistory)

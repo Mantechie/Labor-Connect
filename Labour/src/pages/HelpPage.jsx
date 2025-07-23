@@ -95,7 +95,7 @@ const HelpPage = () => {
             <textarea className="form-control" rows={3} placeholder="Describe the abuse or fraud..." required></textarea>
           </div>
           <div className="mb-3">
-            <label className="form-label">Your Email (optional)</label>
+            <label className="form-label">Your Email</label>
             <input type="email" className="form-control" placeholder="you@example.com" />
           </div>
           <button type="submit" className="btn btn-danger">Report</button>

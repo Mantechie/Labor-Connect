@@ -281,7 +281,6 @@ const UserManagement = () => {
     sortBy: 'createdAt',
     sortOrder: 'desc'
   });
-  const [selectedUsers, setSelectedUsers] = useState([]);
   const [showUserModal, setShowUserModal] = useState(false);
   const [selectedUser, setSelectedUser] = useState(null);
   const [showBlockModal, setShowBlockModal] = useState(false);
@@ -434,21 +433,14 @@ const UserManagement = () => {
     }));
   };
 
-  const handleUserSelect = (userId) => {
-    setSelectedUsers(prev => 
-      prev.includes(userId) 
-        ? prev.filter(id => id !== userId)
-        : [...prev, userId]
-    );
-  };
 
-  const handleSelectAll = () => {
+  /*const handleSelectAll = () => {
     if (selectedUsers.length === users.length) {
       setSelectedUsers([]);
     } else {
       setSelectedUsers(users.map(user => user._id));
     }
-  };
+  };*/
 
   const handleViewUser = (user) => {
     setSelectedUser(user);

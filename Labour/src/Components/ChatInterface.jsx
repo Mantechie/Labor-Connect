@@ -27,7 +27,7 @@ const ChatInterface = () => {
   const [sending, setSending] = useState(false);
   const [chatList, setChatList] = useState([]);
   const [selectedChat, setSelectedChat] = useState(null);
-  const [onlineUsers, setOnlineUsers] = useState([]);
+ const [onlineUsers] = useState([]);
 
   const laborerId = searchParams.get('laborer');
 

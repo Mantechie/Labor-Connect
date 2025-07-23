@@ -17,7 +17,7 @@ import reviewRoutes from './routes/reviewRoutes.js'
 import chatRoutes from './routes/chatRoutes.js'
 import categoryRoutes from './routes/categoryRoutes.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js'
-import { corsDebugMiddleware, credentialsMiddleware, preflightHandler, validateCorsOrigin } from './middlewares/corsMiddleware.js'
+import { corsDebugMiddleware, credentialsMiddleware, preflightHandler, validateCorsOrigin, corsErrorHandler, dynamicCorsOrigin } from './middlewares/corsMiddleware.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import reportRoutes from './routes/reportRoutes.js';
@@ -38,31 +38,43 @@ initializeSocket(server)
 app.set('view engine', 'ejs')
 app.set('views', path.join(__dirname, 'views'))
 
+// Trust proxy for production deployments
+app.set('trust proxy', 1);
+
 // Middleware
-app.use(express.json()) // For JSON body parsing
+app.use(express.json({ limit: '10mb' })); // For JSON body parsing with size limit
+app.use(express.urlencoded({ extended: true, limit: '10mb' })); // For form data
 
 // CORS Debug Middleware (development only)
 if (config.NODE_ENV === 'development') {
   app.use(corsDebugMiddleware);
 }
 
-// Enhanced CORS Configuration
+// Use credentials middleware to set security headers
+app.use(credentialsMiddleware);
+
+// Handle preflight OPTIONS requests BEFORE main CORS middleware
+app.use(preflightHandler);
+
+// Dynamic CORS origin setter
+app.use(dynamicCorsOrigin);
+
+// Main CORS Configuration with enhanced validation
 app.use(cors({
-  origin: function (origin, callback) {
-    if (validateCorsOrigin(origin)) {
-      return callback(null, true);
+  origin: (origin, callback) => {
+    if (config.NODE_ENV === 'development') {
+      console.log(`🔍 CORS Check: Origin "${origin}" being validated...`);
     }
-    const allowedOrigins = [
-        'http://localhost:5173',
-        'http://localhost:8080',
-        'https://labour-phi.vercel.app/',
-        'https://labor-connect.onrender.com'
-    ]
-    const error = new Error(`CORS policy violation: Origin ${origin} not allowed`);
-    console.error(`❌ CORS Error: ${error.message}`);
-    return callback(error);
+    
+    if (validateCorsOrigin(origin)) {
+      callback(null, true);
+    } else {
+      const error = new Error(`CORS policy violation: Origin "${origin}" is not allowed`);
+      error.status = 403;
+      callback(error);
+    }
   },
-  credentials: true,
+  credentials: config.CORS_CREDENTIALS,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS', 'HEAD'],
   allowedHeaders: [
     'Origin',
@@ -73,17 +85,21 @@ app.use(cors({
     'Cache-Control',
     'X-HTTP-Method-Override',
     'X-Forwarded-For',
-    'X-Real-IP'
+    'X-Real-IP',
+    'User-Agent',
+    'Referer',
+    'Accept-Language',
+    'Accept-Encoding'
   ],
-  exposedHeaders: ['Content-Length', 'X-Total-Count', 'X-Page-Count'],
-  maxAge: 86400, // 24 hours
-  preflightContinue: false,
-  optionsSuccessStatus: 200
-}))
-
-// Additional CORS and security middleware
-app.use(credentialsMiddleware);
-app.use(preflightHandler);
+  exposedHeaders: [
+    'X-Total-Count',
+    'X-Page-Count',
+    'X-Current-Page',
+    'X-Per-Page'
+  ],
+  maxAge: config.CORS_MAX_AGE,
+  optionsSuccessStatus: 204 // Some legacy browsers choke on 204
+}));
 
 // Use different logging based on environment
 if (process.env.NODE_ENV === 'production') {
@@ -104,30 +120,34 @@ app.get('/api/health', (req, res) => {
   });
 });
 
-// API Routes
+// API Routes - Mount more specific routes BEFORE general ones
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
-app.use('/api/laborers', laborerRoutes);
-app.use('/api/jobs', jobRoutes);
 
 // IMPORTANT: Mount admin auth routes BEFORE admin routes
 // This prevents the admin middleware from being applied to auth routes
 app.use('/api/admin/auth', adminAuthRoutes);
 
-app.use('/api/admin', (req, res, next) => {
-  console.log('🔍 Admin Route:', req.method, req.originalUrl);
-  next();
-}, adminRoutes);
-
+// Mount more specific admin routes BEFORE general admin routes
 app.use('/api/admin/users', (req, res, next) => {
   console.log('🔍 User Management Route:', req.method, req.originalUrl);
   next();
 }, userManagementRoutes);
 
+// Mount more specific laborer routes BEFORE general laborer routes
 app.use('/api/laborers/management', (req, res, next) => {
   console.log('🔍 Laborer Management Route:', req.method, req.originalUrl);
   next();
 }, laborerManagementRoutes);
+
+app.use('/api/laborers', laborerRoutes);
+app.use('/api/jobs', jobRoutes);
+
+// Mount general admin routes AFTER specific admin routes
+app.use('/api/admin', (req, res, next) => {
+  console.log('🔍 Admin Route:', req.method, req.originalUrl);
+  next();
+}, adminRoutes);
 
 app.use('/api/reviews', reviewRoutes);
 app.use('/api/chats', chatRoutes);
@@ -173,6 +193,7 @@ app.use((req, res) => {
 })
 
 // Error Middlewares
+app.use(corsErrorHandler) // Handle CORS errors first
 app.use(notFound)
 app.use(errorHandler)
 

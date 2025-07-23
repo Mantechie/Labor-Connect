@@ -145,7 +145,7 @@ const JobPostPage = () => {
                 onChange={handleChange}
                 disabled={loading}
               />
-              <label htmlFor="floatingBudget">Budget (Optional)</label>
+              <label htmlFor="floatingBudget">Budget</label>
             </div>
           </div>
           <div className="col-md-6 mb-3">

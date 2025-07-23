@@ -34,7 +34,7 @@ const UserProfile = () => {
   const [hiredLabor, setHiredLabor] = useState([]);
   const [loadingHistory, setLoadingHistory] = useState(false);
   
-  // Profile photo
+  /* Profile photo
   const [photoPreview, setPhotoPreview] = useState('');
 
   useEffect(() => {
@@ -49,25 +49,20 @@ const UserProfile = () => {
         setPhotoPreview(user.profilePhoto);
       }
     }
-  }, [user]);
+  }, [user]); */
 
   const handlePhotoUpdate = async (file) => {
     const formData = new FormData();
     formData.append('profilePhoto', file);
 
-    try {
-      const response = await axiosInstance.post('/users/profile-photo', formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      updateUser({ ...user, profilePhoto: response.data.profilePhoto });
-      setPhotoPreview(response.data.profilePhoto);
-      return response;
-    } catch (error) {
-      throw error;
-    }
+    const response = await axiosInstance.post('/users/profile-photo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    
+    updateUser({ ...user, profilePhoto: response.data.profilePhoto });
+    updateUser({ ...user, profilePhoto: response.data.profilePhoto });
+    return response;
   };
-
   const handleProfileUpdate = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -358,8 +353,8 @@ const UserProfile = () => {
                         <Button size="sm" variant="outline-primary" as="a" href="/job-post">
                           📝 Post a Job
                         </Button>
-                        <Button size="sm" variant="outline-success" as="a" href="/job-listings">
-                          🔍 Browse Jobs
+                        <Button size="sm" variant="outline-success" as="a" href="/browse-laborers">
+                          🔍 Browse laborers
                         </Button>
                       </div>
                     </Alert>

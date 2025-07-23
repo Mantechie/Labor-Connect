@@ -1,11 +1,11 @@
 // src/components/Header.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, /*useEffect*/ } from 'react';
 import { Link, NavLink } from 'react-router-dom';
 import { Navbar, Nav, Container, NavDropdown, Button } from 'react-bootstrap';
 import { useAuth } from '../contexts/AuthContext';
 import 'bootstrap/dist/css/bootstrap.min.css';
 
-const LANGUAGES = [
+/*const LANGUAGES = [
   { code: 'EN', label: 'EN - English', icon: '🇬🇧' },
   { code: 'HI', label: 'HI - हिन्दी', icon: '🇮🇳' },
   { code: 'RAJ', label: 'RAJ - राजस्थानी', icon: '🌾' },
@@ -72,14 +72,14 @@ const TRANSLATIONS = {
     adminDashboard: 'एडमिन डैशबोर्ड',
     logout: 'लॉगआउट',
   },
-};
+};*/
 
 const Header = () => {
-  const [currentLang, setCurrentLang] = useState('EN');
+  //const [currentLang, setCurrentLang] = useState('EN');
   const [expanded, setExpanded] = useState(false);
   const { user, logout } = useAuth();
 
-  useEffect(() => {
+  /*useEffect(() => {
     const storedLang = localStorage.getItem('labour_lang');
     if (storedLang && LANGUAGES.some(l => l.code === storedLang)) {
       setCurrentLang(storedLang);
@@ -91,7 +91,29 @@ const Header = () => {
     localStorage.setItem('labour_lang', code);
   };
 
-  const t = TRANSLATIONS[currentLang];
+  const t = TRANSLATIONS[currentLang]; */
+
+  // Simple static translations for now
+  const t = {
+    home: 'Home',
+    jobs: 'Jobs',
+    findLabour: 'Find Labour',
+    postWork: 'Post Work',
+    help: 'Help',
+    login: 'Login',
+    signup: 'Sign Up',
+    browseLaborers: 'Browse Laborers',
+    myJobs: 'My Jobs',
+    postJob: 'Post Job',
+    applyJobs: 'Apply for Jobs',
+    myRatings: 'My Ratings',
+    portfolio: 'Portfolio',
+    documents: 'Documents',
+    profile: 'Profile',
+    messages: 'Messages',
+    adminDashboard: 'Admin Dashboard',
+    logout: 'Logout',
+  };
 
   return (
     <Navbar
@@ -134,7 +156,8 @@ const Header = () => {
             <Nav.Link as={NavLink} to="/help" onClick={() => setExpanded(false)}>❓ {t.help}</Nav.Link>
           </Nav>
           <Nav className="ms-auto align-items-center gap-2">
-            <NavDropdown
+        {/*
+          <NavDropdown
               title={<span><span role="img" aria-label="Language">🌐</span> <b>{currentLang}</b></span>}
               id="language-dropdown"
               align="end"
@@ -157,6 +180,7 @@ const Header = () => {
                 More languages coming soon
               </NavDropdown.Item>
             </NavDropdown>
+            */}
             {user ? (
               <>
                 <NavDropdown

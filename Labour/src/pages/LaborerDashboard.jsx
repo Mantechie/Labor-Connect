@@ -121,13 +121,14 @@ const LaborerDashboard = () => {
   const handleAvailabilityToggle = async () => {
     const newStatus = profileForm.availability === 'available' ? 'busy' : 'available';
     try {
-      const response = await axiosInstance.put('/laborers/availability', { 
+      await axiosInstance.put('/laborers/availability', { 
         availability: newStatus 
       });
       setProfileForm({ ...profileForm, availability: newStatus });
       updateUser({ ...user, availability: newStatus });
       showToast(`Status changed to ${newStatus}`, 'success');
     } catch (error) {
+      console.error('Failed to update availability:', error);
       showToast('Failed to update availability', 'danger');
     }
   };
@@ -158,7 +159,7 @@ const LaborerDashboard = () => {
         }
       });
 
-      const response = await axiosInstance.post('/laborers/documents', formData, {
+      await axiosInstance.post('/laborers/documents', formData, {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
@@ -241,6 +242,9 @@ const LaborerDashboard = () => {
           </Button>
           <Button variant="outline-primary" onClick={() => setShowProfileModal(true)}>
             📝 Edit Profile
+          </Button>
+          <Button variant="outline-info" onClick={() => window.location.href = '/laborer-dashboard/ratings'}>
+            ⭐ My Rating
           </Button>
         </div>
       </div>

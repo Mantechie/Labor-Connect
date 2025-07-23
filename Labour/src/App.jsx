@@ -23,6 +23,7 @@ import UserProfile from './pages/UserProfile';
 import BrowseLaborers from './pages/BrowseLaborers';
 import JobManagement from './pages/JobManagement';
 import LaborerDashboard from './pages/LaborerDashboard';
+import LaborerRatings from './pages/LaborerRatings';
 import UserDashboard from './pages/UserDashboard';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
@@ -152,6 +153,13 @@ const App = () => {
                 <AppLayout>
                   <ProtectedRoute>
                     <LaborerDashboard />
+                  </ProtectedRoute>
+                </AppLayout>
+              } />
+              <Route path="/laborer-dashboard/ratings" element={
+                <AppLayout>
+                  <ProtectedRoute>
+                    <LaborerRatings />
                   </ProtectedRoute>
                 </AppLayout>
               } />

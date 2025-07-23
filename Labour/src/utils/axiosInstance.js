@@ -1,11 +1,24 @@
 import axios from 'axios'
 
+// Create axios instance with comprehensive CORS configuration
 const axiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  timeout: 30000, // 30 second timeout
   headers: {
     'Content-Type': 'application/json',
+    'Accept': 'application/json',
   },
+  withCredentials: true, // Include credentials (cookies, auth headers) in requests
+  
+  // Additional CORS-related configurations
+  validateStatus: function (status) {
+    // Consider 2xx and 3xx as success, handle CORS errors properly
+    return status >= 200 && status < 400;
+  }
 })
+
+// Add request ID for debugging
+let requestId = 0;
 
 // Flag to prevent multiple refresh requests
 let isRefreshing = false;
@@ -23,24 +36,86 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-// Request interceptor to add auth token
+// Request interceptor to add auth token and debug info
 axiosInstance.interceptors.request.use(
   (config) => {
+    // Add request ID for debugging
+    config.metadata = { requestId: ++requestId, startTime: Date.now() };
+    
+    // Add auth token
     const token = localStorage.getItem('token');
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    
+    // Add additional headers for CORS compatibility
+    config.headers['X-Requested-With'] = 'XMLHttpRequest';
+    
+    // Debug logging in development
+    if (import.meta.env.VITE_NODE_ENV === 'development' && import.meta.env.VITE_SHOW_CONSOLE_LOGS === 'true') {
+      console.log(`🚀 API Request [${config.metadata.requestId}]:`, {
+        method: config.method?.toUpperCase(),
+        url: config.url,
+        baseURL: config.baseURL,
+        headers: config.headers,
+        data: config.data
+      });
+    }
+    
     return config;
   },
   (error) => {
+    console.error('❌ Request interceptor error:', error);
     return Promise.reject(error);
   }
 );
 
-// Response interceptor to handle token refresh
+// Response interceptor to handle token refresh and CORS errors
 axiosInstance.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Debug logging in development
+    if (import.meta.env.VITE_NODE_ENV === 'development' && import.meta.env.VITE_SHOW_CONSOLE_LOGS === 'true') {
+      const duration = Date.now() - response.config.metadata?.startTime;
+      console.log(`✅ API Response [${response.config.metadata?.requestId}]:`, {
+        status: response.status,
+        statusText: response.statusText,
+        duration: `${duration}ms`,
+        data: response.data
+      });
+    }
+    return response;
+  },
   async (error) => {
+    // Enhanced error logging
+    if (import.meta.env.VITE_NODE_ENV === 'development') {
+      console.error('❌ API Error:', {
+        message: error.message,
+        status: error.response?.status,
+        statusText: error.response?.statusText,
+        data: error.response?.data,
+        config: {
+          method: error.config?.method,
+          url: error.config?.url,
+          baseURL: error.config?.baseURL
+        }
+      });
+    }
+    
+    // Handle CORS errors specifically
+    if (error.message?.includes('CORS') || error.message?.includes('Network Error')) {
+      console.error('🚫 CORS Error detected:', error.message);
+      
+      // Show user-friendly CORS error
+      if (window.showToast) {
+        window.showToast('Connection error. Please check if the server is running.', 'error');
+      }
+      
+      return Promise.reject({
+        ...error,
+        isCorsError: true,
+        userMessage: 'Unable to connect to server. Please try again later.'
+      });
+    }
     const originalRequest = error.config;
 
     if (error.response?.status === 401 && !originalRequest._retry) {
@@ -71,7 +146,7 @@ axiosInstance.interceptors.response.use(
 
       try {
         const response = await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api'}/auth/refresh`,
+          `${import.meta.env.VITE_API_BASE_URL || '/api'}/auth/refresh`,
           { refreshToken }
         );
 

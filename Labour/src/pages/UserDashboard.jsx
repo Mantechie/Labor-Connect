@@ -19,7 +19,7 @@ import {
 } from 'react-bootstrap';
 
 const UserDashboard = () => {
-  const { user, updateUser } = useAuth();
+  const { user } = useAuth();
   const { showToast } = useToast();
   
   const [activeTab, setActiveTab] = useState('overview');
@@ -78,7 +78,7 @@ const UserDashboard = () => {
     setLoading(true);
 
     try {
-      const response = await axiosInstance.post('/jobs', jobForm);
+      await axiosInstance.post('/jobs', jobForm);
       showToast('Job posted successfully!', 'success');
       setShowJobModal(false);
       setJobForm({
@@ -104,7 +104,7 @@ const UserDashboard = () => {
 
     setLoading(true);
     try {
-      const response = await axiosInstance.post('/jobs/hire-laborer', {
+      await axiosInstance.post('/jobs/hire-laborer', {
         laborerId: selectedLaborer._id,
         jobTitle: hireForm.message,
         description: `Direct hire request for ${selectedLaborer.name}`,
@@ -318,7 +318,7 @@ const UserDashboard = () => {
           )}
         </Tab>
 
-        <Tab eventKey="jobs" title="💼 My Jobs">
+        <Tab eventKey="jobs" title="💼 My Posted Jobs">
           {loading ? (
             <div className="text-center py-5">
               <Spinner animation="border" role="status">

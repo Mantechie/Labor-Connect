@@ -33,7 +33,7 @@ const AdminAuthTest = () => {
   const testLogin = async () => {
     setTestResult('Testing login...');
     try {
-      const result = await adminAuthService.login('admin@example.com', 'admin123');
+      await adminAuthService.login('admin@example.com', 'admin123');
       setTestResult('✅ Login successful! Checking auth state...');
       setTimeout(() => {
         checkAuthState();

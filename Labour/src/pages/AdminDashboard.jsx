@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import UserManagement from '../Components/UserManagement';
+import LaborerManagement from '../Components/LaborerManagement';
 import { 
   Card, 
   Row, 
@@ -212,10 +213,7 @@ const AdminDashboard = () => {
             <UserManagement />
           </Tab>
           <Tab eventKey="laborers" title="🔧 Laborers">
-            <div className="text-center py-5">
-              <h4>🧰 Laborer Management</h4>
-              <p className="text-muted">Laborer management features coming soon...</p>
-            </div>
+            <LaborerManagement />
           </Tab>
         </Tabs>
       </Container>

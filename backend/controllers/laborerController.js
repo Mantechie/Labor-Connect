@@ -287,8 +287,8 @@ export const getCompletedJobs = async (req, res) => {
       _id: job._id,
       title: job.job.title,
       description: job.job.description,
-      budget: job.job.budget,
-      location: job.job.location,
+      budget: job.budget,
+      location: job.location,
       clientName: job.client.name,
       completedAt: job.completedAt,
       rating: job.rating,
@@ -299,6 +299,72 @@ export const getCompletedJobs = async (req, res) => {
   } catch (error) {
     console.error('Error fetching completed jobs:', error);
     res.status(500).json({ message: 'Failed to fetch completed jobs' });
+  }
+};
+
+// New controller method to browse laborers with pagination, filtering, and sorting
+export const browseLaborers = async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 6,
+      search = '',
+      skill = '',
+      location = '',
+      minPrice = 0,
+      maxPrice = Number.MAX_SAFE_INTEGER,
+      rating = 0,
+      availability = '',
+      sort = 'asc'
+    } = req.query;
+
+    const query = { role: 'laborer' };
+
+    if (search) {
+      query.$or = [
+        { name: { $regex: search, $options: 'i' } },
+        { _id: search }
+      ];
+    }
+
+    if (skill) {
+      query.skills = { $in: [skill] };
+    }
+
+    if (location) {
+      query.location = { $regex: location, $options: 'i' };
+    }
+
+    if (minPrice || maxPrice) {
+      query.dailyRate = { $gte: Number(minPrice), $lte: Number(maxPrice) };
+    }
+
+    if (rating) {
+      query.rating = { $gte: Number(rating) };
+    }
+
+    if (availability) {
+      query.availability = availability;
+    }
+
+    const sortOrder = sort === 'asc' ? 1 : -1;
+
+    const total = await User.countDocuments(query);
+    const laborers = await User.find(query)
+      .sort({ rating: sortOrder })
+      .skip((page - 1) * limit)
+      .limit(Number(limit))
+      .select('-password');
+
+    res.json({
+      total,
+      page: Number(page),
+      limit: Number(limit),
+      laborers
+    });
+  } catch (error) {
+    console.error('Error browsing laborers:', error);
+    res.status(500).json({ message: 'Failed to browse laborers' });
   }
 };
 

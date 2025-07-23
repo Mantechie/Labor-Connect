@@ -20,7 +20,8 @@ const SignupPage = () => {
 
   const roles = [
     { value: 'user', label: 'User' },
-    { value: 'laborer', label: 'Laborer' }
+    { value: 'laborer', label: 'Laborer' },
+    { value: 'contractor', label: 'Contractor' }
   ];
 
   const handleChange = (e) => {
