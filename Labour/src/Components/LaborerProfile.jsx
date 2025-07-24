@@ -37,6 +37,7 @@ const starRating = (rating) => {
 const LaborerProfile = () => {
   return (
     <div className="container py-5">
+
       <div className="card shadow-lg rounded-2xl p-4">
         <div className="d-flex flex-column flex-md-row align-items-start gap-4">
           <img

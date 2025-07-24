@@ -145,6 +145,14 @@ export const getAllLaborers = async (req, res) => {
       userAgent: req.get('User-Agent')
     });
 
+    // Set cache control headers to prevent 304 responses for admin data
+    res.set({
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
+      'Expires': '0',
+      'ETag': false
+    });
+
     res.status(200).json({
       laborers,
       pagination: {
@@ -164,7 +172,8 @@ export const getAllLaborers = async (req, res) => {
         available: 0,
         unavailable: 0
       },
-      specializationStats
+      specializationStats,
+      timestamp: new Date().toISOString() // Add timestamp to ensure uniqueness
     });
   } catch (error) {
     console.error('Error getting laborers:', error);

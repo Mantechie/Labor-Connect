@@ -136,7 +136,7 @@ const BrowseLaborers = () => {
   const [selectedLaborer, setSelectedLaborer] = useState(null);
   const [showProfileModal, setShowProfileModal] = useState(false);
   const [showHireModal, setShowHireModal] = useState(false);
-  const [apiError, setApiError] = useState(false);
+  //const [apiError, setApiError] = useState(false);
   
   // Search and filter state
   const [searchTerm, setSearchTerm] = useState('');
@@ -184,7 +184,7 @@ const BrowseLaborers = () => {
 
   const loadLaborers = async () => {
     setLoading(true);
-    setApiError(false);
+    //setApiError(false);
     
     try {
       const params = new URLSearchParams({
@@ -215,7 +215,7 @@ const BrowseLaborers = () => {
       
     } catch (error) {
       console.error('❌ API Error:', error);
-      setApiError(true);
+      //setApiError(true);
       
       // Fallback to dummy data with client-side filtering
       const filteredDummy = applyClientSideFilters(dummyLaborers);
@@ -384,11 +384,13 @@ const BrowseLaborers = () => {
   };
 
   return (
+
     <Container fluid className="py-4">
-      {/* CORS Status Component (Development Only) */}
+      {/*
+      {/* CORS Status Component (Development Only) 
       <CorsStatus />
       
-      {/* API Error Alert */}
+      {/* API Error Alert 
       {apiError && (
         <Alert variant="warning" className="mb-4">
           <Alert.Heading>⚠️ API Connection Issue</Alert.Heading>
@@ -398,12 +400,13 @@ const BrowseLaborers = () => {
             <strong>For developers:</strong> Ensure backend is running on port 8080 and CORS is properly configured.
           </p>
         </Alert>
-      )}
+      )} 
+      */}
 
       <Row>
         {/* Filters Sidebar */}
         <Col lg={3}>
-          <Card className="sticky-top" style={{ top: '0' }}>
+          <Card className="sticky" style={{ top: '0' }}>
             <Card.Header>
               <h5 className="mb-0">🔍 Search & Filters</h5>
             </Card.Header>

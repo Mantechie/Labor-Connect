@@ -4,9 +4,7 @@ import {
   getAdminStats,
   getRecentActivity,
   getAllUsers,
-  getAllLaborers,
   updateUserStatus,
-  verifyLaborer,
   getJobApplications,
   getSystemHealth,
   // New admin functions
@@ -20,6 +18,11 @@ import {
   getAdminAnalytics,
   exportData
 } from '../controllers/adminController.js';
+
+import {
+  getAllLaborers,
+  updateLaborerVerification as verifyLaborer
+} from '../controllers/laborerManagementController.js';
 
 import {
   getAdminLogs,

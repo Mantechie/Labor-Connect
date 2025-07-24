@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 
 const categoryList = [
   { title: 'Mason (राज मिस्त्री)', img: 'https://cdn-icons-png.flaticon.com/128/7857/7857909.png' },
@@ -69,6 +69,7 @@ const HomePage = () => {
   const [dropdownOpen, setDropdownOpen] = useState(false);
   const [highlightIdx, setHighlightIdx] = useState(-1);
   const inputRef = useRef(null);
+  const navigate = useNavigate();
 
   // Filter categories based on input
   const filteredCategories = searchText
@@ -85,6 +86,8 @@ const HomePage = () => {
     setSearchText(cat.title);
     setDropdownOpen(false);
     setHighlightIdx(-1);
+    // Navigate to fixed laborer profile page as per feedback
+    navigate('/laborer-profile');
   };
 
   const handleInputFocus = () => {
@@ -97,10 +100,27 @@ const HomePage = () => {
 
   const handleKeyDown = (e) => {
     if (!dropdownOpen) return;
+    const listElement = inputRef.current.nextElementSibling; // ul element
     if (e.key === 'ArrowDown') {
-      setHighlightIdx(idx => Math.min(idx + 1, filteredCategories.length - 1));
+      e.preventDefault();
+      setHighlightIdx(idx => {
+        const nextIdx = Math.min(idx + 1, filteredCategories.length - 1);
+        // Scroll into view
+        if (listElement && listElement.children[nextIdx]) {
+          listElement.children[nextIdx].scrollIntoView({ block: 'nearest' });
+        }
+        return nextIdx;
+      });
     } else if (e.key === 'ArrowUp') {
-      setHighlightIdx(idx => Math.max(idx - 1, 0));
+      e.preventDefault();
+      setHighlightIdx(idx => {
+        const prevIdx = Math.max(idx - 1, 0);
+        // Scroll into view
+        if (listElement && listElement.children[prevIdx]) {
+          listElement.children[prevIdx].scrollIntoView({ block: 'nearest' });
+        }
+        return prevIdx;
+      });
     } else if (e.key === 'Enter' && highlightIdx >= 0) {
       handleCategorySelect(filteredCategories[highlightIdx]);
     }
@@ -108,11 +128,12 @@ const HomePage = () => {
 
   const handleSearch = (e) => {
     e.preventDefault();
-    alert(
-      searchText
-        ? `Searching for: ${searchText}`
-        : 'Please type or select a category to search.'
-    );
+    if (!searchText) {
+      alert('Please type or select a category to search.');
+      return;
+    }
+    // Navigate to fixed laborer profile page as per feedback
+    navigate('/laborer-profile');
   };
 
   return (
@@ -166,8 +187,11 @@ const HomePage = () => {
             <span className="trust-badge me-2">✅ Verified by Aadhaar</span>
             <span className="trust-badge bg-warning text-dark">🌟 Trusted by 10,000+ users</span>
           </div>
-          <div className="d-flex flex-wrap justify-content-center gap-2 mt-2">
-            <Link to="/job-post" className="btn btn-success rounded-pill px-4 fw-semibold">Post Your Work</Link>
+          <div>
+            <Link to="/login" className="btn btn-success rounded-pill px-4 fw-semibold" 
+                  onClick={() => alert('You have to login as user to post your job')}>
+              Post Your Work
+            </Link>
             <Link to="/signup" className="btn btn-outline-primary rounded-pill px-4 fw-semibold">Join as Laborer</Link>
           </div>
         </div>
@@ -179,7 +203,13 @@ const HomePage = () => {
         <div className="row g-3">
           {categories.map((cat, idx) => (
             <div className="col-6 col-md-3 col-lg-2" key={idx}>
-              <div className="category-card p-3 h-100 d-flex flex-column align-items-center justify-content-center">
+              <div
+                className="card category-card p-3 h-100 d-flex flex-column align-items-center justify-content-center"
+                style={{ cursor: 'pointer', borderRadius: '10px'}}
+                onClick={() => handleCategorySelect(cat)}
+                onMouseEnter={e => e.currentTarget.classList.add('shadow-lg')}
+                onMouseLeave={e => e.currentTarget.classList.remove('shadow-lg')}
+              >
                 <img src={cat.img || defaultIcon} alt={cat.title} style={{ width: 60, height: 60 }} className="mb-2" />
                 <h6 className="fw-bold mb-0 text-center" style={{ fontSize: '0.95rem' }}>{cat.title}</h6>
               </div>
@@ -199,7 +229,7 @@ const HomePage = () => {
                 <span className="badge bg-success mb-1">{lab.specialization}</span>
                 <span className="badge bg-info mb-1">{lab.badge}</span>
                 <p className="mb-1">⭐ {lab.rating} / 5</p>
-                <Link to={`/laborers/${lab._id}`} className="btn btn-sm btn-outline-primary rounded-pill mt-2">View Profile</Link>
+                <Link to={`/laborers/:id}`} className="btn btn-sm btn-outline-primary rounded-pill mt-2">View Profile</Link>
               </div>
             </div>
           ))}

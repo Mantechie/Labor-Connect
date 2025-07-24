@@ -2,7 +2,7 @@ import axios from 'axios'
 
 // Create axios instance with comprehensive CORS configuration
 const axiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || '',
   timeout: 30000, // 30 second timeout
   headers: {
     'Content-Type': 'application/json',
@@ -146,7 +146,7 @@ axiosInstance.interceptors.response.use(
 
       try {
         const response = await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL || '/api'}/auth/refresh`,
+          `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
           { refreshToken }
         );
 

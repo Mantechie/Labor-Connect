@@ -99,14 +99,15 @@ const Header = () => {
     jobs: 'Jobs',
     findLabour: 'Find Labour',
     postWork: 'Post Work',
+    aboutUs: 'About Us',
     help: 'Help',
     login: 'Login',
     signup: 'Sign Up',
     browseLaborers: 'Browse Laborers',
     myJobs: 'My Jobs',
     postJob: 'Post Job',
-    applyJobs: 'Apply for Jobs',
-    myRatings: 'My Ratings',
+    applyJobs: 'Job Requests',
+    myRatings: 'Ratings & Reviews',
     portfolio: 'Portfolio',
     documents: 'Documents',
     profile: 'Profile',
@@ -132,25 +133,28 @@ const Header = () => {
         <Navbar.Toggle aria-controls="main-navbar-nav" />
         <Navbar.Collapse id="main-navbar-nav">
           <Nav className="me-auto gap-2">
-            <Nav.Link as={NavLink} to="/" onClick={() => setExpanded(false)}>🏠 {t.home}</Nav.Link>
             {!user && (
               <>
-                <Nav.Link as={NavLink} to="/job-listings" onClick={() => setExpanded(false)}>🛠️ {t.jobs}</Nav.Link>
-                <Nav.Link as={NavLink} to="/laborer-profile" onClick={() => setExpanded(false)}>👷‍♂️ {t.findLabour}</Nav.Link>
+                <Nav.Link as={NavLink} to="/" onClick={() => setExpanded(false)}>🏠 {t.home}</Nav.Link>
+                <Nav.Link as={NavLink} to="/about" onClick={() => setExpanded(false)}>ℹ️{t.aboutUs}</Nav.Link>
+                <Nav.Link as={NavLink} to="/laborer-profile" onClick={() => setExpanded(false)}>👷‍♂️{t.findLabour}</Nav.Link>
               </>
             )}
             {user && user.role === 'user' && (
               <>
+                <Nav.Link as={NavLink} to="/user-dashboard" onClick={() => setExpanded(false)}>🏠My Dashboard</Nav.Link>
                 <Nav.Link as={NavLink} to="/browse-laborers" onClick={() => setExpanded(false)}>👷 {t.browseLaborers}</Nav.Link>
                 <Nav.Link as={NavLink} to="/job-post" onClick={() => setExpanded(false)}>➕ {t.postJob}</Nav.Link>
+                <Nav.Link as={NavLink} to="/user-Complaints" onClick={() => setExpanded(false)}>⚠️Register Complaints</Nav.Link>
               </>
             )}
             {user && user.role === 'laborer' && (
               <>
-                <Nav.Link as={NavLink} to="/job-listings" onClick={() => setExpanded(false)}>📋 {t.applyJobs}</Nav.Link>
-                <Nav.Link as={NavLink} to="/ratings" onClick={() => setExpanded(false)}>⭐ {t.myRatings}</Nav.Link>
-                <Nav.Link as={NavLink} to="/portfolio" onClick={() => setExpanded(false)}>📸 {t.portfolio}</Nav.Link>
-                <Nav.Link as={NavLink} to="/documents" onClick={() => setExpanded(false)}>📄 {t.documents}</Nav.Link>
+                <Nav.Link as={NavLink} to="/laborer-dashboard" onClick={() => setExpanded(false)}>👷Laborer Dashboard</Nav.Link>
+                <Nav.Link as={NavLink} to="/job-listings" onClick={() => setExpanded(false)}>📋{t.applyJobs}</Nav.Link>
+                <Nav.Link as={NavLink} to="/portfolio" onClick={() => setExpanded(false)}>📸{t.portfolio}</Nav.Link>
+                <Nav.Link as={NavLink} to="/documents" onClick={() => setExpanded(false)}>📋{t.documents}</Nav.Link>
+                <Nav.Link as={NavLink} to="/complaints" onClick={() => setExpanded(false)}>⚠️ Complaints</Nav.Link>
               </>
             )}
             <Nav.Link as={NavLink} to="/help" onClick={() => setExpanded(false)}>❓ {t.help}</Nav.Link>
@@ -188,18 +192,11 @@ const Header = () => {
                   id="user-dropdown"
                   align="end"
                   className="mb-2 mb-lg-0"
-                >
+                > 
+                  {user.role === 'user' && (
                   <NavDropdown.Item as={Link} to="/profile" onClick={() => setExpanded(false)}>
                     📋 Profile
                   </NavDropdown.Item>
-                  {user.role === 'laborer' ? (
-                    <NavDropdown.Item as={NavLink} to="/laborer-dashboard" onClick={() => setExpanded(false)}>
-                      👷 Laborer Dashboard
-                    </NavDropdown.Item>
-                  ) : (
-                    <NavDropdown.Item as={NavLink} to="/user-dashboard" onClick={() => setExpanded(false)}>
-                      🏠 My Dashboard
-                    </NavDropdown.Item>
                   )}
                   <NavDropdown.Item as={Link} to="/chat" onClick={() => setExpanded(false)}>
                     💬 Messages
@@ -241,3 +238,4 @@ const Header = () => {
 };
 
 export default Header;
+

@@ -25,16 +25,26 @@ const createAdmin = async () => {
   }
 
   try {
-    // Check if admin already exists
-    const existingAdmin = await Admin.findOne({ email: 'admin@example.com' });
+    // Check if admin already exists by email or phone
+    const existingAdmin = await Admin.findOne({ 
+      $or: [
+        { email: 'admin@example.com' },
+        { phone: '9876543210' }
+      ]
+    });
+    
     if (existingAdmin) {
-      console.log('✅ Admin already exists: admin@example.com');
+      console.log('✅ Admin already exists:');
       console.log('Admin details:', {
         name: existingAdmin.name,
         email: existingAdmin.email,
+        phone: existingAdmin.phone,
         role: existingAdmin.role,
         isActive: existingAdmin.isActive
       });
+      console.log('Login credentials:');
+      console.log('Email:', existingAdmin.email);
+      console.log('Password: admin123 (if not changed)');
     } else {
       // Create new admin
       const newAdmin = new Admin({

@@ -243,7 +243,7 @@ const LaborerDashboard = () => {
           <Button variant="outline-primary" onClick={() => setShowProfileModal(true)}>
             📝 Edit Profile
           </Button>
-          <Button variant="outline-info" onClick={() => window.location.href = '/laborer-dashboard/ratings'}>
+          <Button variant="outline-info" onClick={() => window.location.href = '/myRatings'}>
             ⭐ My Rating
           </Button>
         </div>
@@ -520,9 +520,9 @@ const LaborerDashboard = () => {
                   <div className="mb-3">
                     <div className="d-flex justify-content-between mb-1">
                       <span>Document Verification</span>
-                      <span>75%</span>
+                      <span>0%</span>
                     </div>
-                    <ProgressBar now={75} variant="success" />
+                    <ProgressBar now={0} variant="success" />
                   </div>
                   <Alert variant="warning">
                     <small>

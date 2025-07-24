@@ -5,7 +5,7 @@ class AdminAuthService {
   async login(email, password) {
     try {
       const requestData = { email, password };
-      const response = await adminAxiosInstance.post('/api/admin/auth/login', requestData);
+      const response = await adminAxiosInstance.post('/admin/auth/login', requestData);
       
       if (response.data.admin && response.data.admin.token) {
         localStorage.setItem('adminToken', response.data.admin.token);
@@ -25,7 +25,7 @@ class AdminAuthService {
   // Admin register (super admin only)
   async register(adminData) {
     try {
-      const response = await adminAxiosInstance.post('/api/admin/auth/register', adminData);
+      const response = await adminAxiosInstance.post('/admin/auth/register', adminData);
       if (response.data.admin && response.data.admin.token) {
         localStorage.setItem('adminToken', response.data.admin.token);
         localStorage.setItem('adminRefreshToken', response.data.admin.refreshToken);
@@ -41,7 +41,7 @@ class AdminAuthService {
   // Send admin OTP
   async sendOTP(email, phone) {
     try {
-      const response = await adminAxiosInstance.post('/api/admin/auth/send-otp', { email, phone });
+      const response = await adminAxiosInstance.post('/admin/auth/send-otp', { email, phone });
       return response.data;
     } catch (error) {
       const errorMessage = error.response?.data?.message || 'Failed to send OTP. Please try again.';
@@ -52,7 +52,7 @@ class AdminAuthService {
   // Verify admin OTP
   async verifyOTP(email, phone, otp) {
     try {
-      const response = await adminAxiosInstance.post('/api/admin/auth/verify-otp', { email, phone, otp });
+      const response = await adminAxiosInstance.post('/admin/auth/verify-otp', { email, phone, otp });
       if (response.data.admin && response.data.admin.token) {
         localStorage.setItem('adminToken', response.data.admin.token);
         localStorage.setItem('adminRefreshToken', response.data.admin.refreshToken);
@@ -73,7 +73,7 @@ class AdminAuthService {
         throw new Error('No refresh token available');
       }
 
-      const response = await adminAxiosInstance.post('/api/admin/auth/refresh', { refreshToken });
+      const response = await adminAxiosInstance.post('/admin/auth/refresh', { refreshToken });
       
       if (response.data.token) {
         // Update tokens in localStorage
@@ -95,7 +95,7 @@ class AdminAuthService {
   // Get current admin
   async getCurrentAdmin() {
     try {
-      const response = await adminAxiosInstance.get('/api/admin/auth/me');
+      const response = await adminAxiosInstance.get('/admin/auth/me');
       return response.data;
     } catch (error) {
       throw new Error('Failed to get admin information.');
@@ -107,7 +107,7 @@ class AdminAuthService {
     try {
       const adminToken = localStorage.getItem('adminToken');
       if (adminToken) {
-        await adminAxiosInstance.post('/api/admin/auth/logout');
+        await adminAxiosInstance.post('/admin/auth/logout');
       }
     } catch (error) {
       // Silently handle logout errors

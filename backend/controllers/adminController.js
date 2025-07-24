@@ -161,52 +161,8 @@ export const getAllUsers = async (req, res) => {
   }
 };
 
-// @desc    Get all laborers with verification status
-// @route   GET /api/admin/laborers
-// @access  Admin only
-export const getAllLaborers = async (req, res) => {
-  try {
-    const { page = 1, limit = 10, search = '', status = '', specialization = '' } = req.query;
-    
-    // Build filter query
-    const filter = { role: 'laborer' };
-    if (status === 'verified') filter.isVerified = true;
-    if (status === 'unverified') filter.isVerified = false;
-    if (status === 'active') filter.availability = 'available';
-    if (status === 'inactive') filter.availability = { $ne: 'available' };
-    if (specialization) filter.specialization = { $regex: specialization, $options: 'i' };
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { skills: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
-    // Get laborers with pagination
-    const laborers = await User.find(filter)
-      .select('-password')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-    
-    // Get total count
-    const total = await User.countDocuments(filter);
-    
-    res.json({
-      laborers,
-      total,
-      page: parseInt(page),
-      totalPages: Math.ceil(total / parseInt(limit))
-    });
-  } catch (error) {
-    console.error('Get all laborers error:', error);
-    res.status(500).json({ message: 'Failed to fetch laborers' });
-  }
-};
+// Note: getAllLaborers function moved to laborerManagementController.js
+// This avoids duplication and uses the dedicated Laborer model
 
 // @desc    Update user status (suspend/activate)
 // @route   PUT /api/admin/users/:id/status

@@ -9,6 +9,7 @@ import { ToastProvider } from './Components/ToastContext';
 import { AuthProvider } from './contexts/AuthContext';
 import ProtectedRoute from './Components/ProtectedRoute';
 import AdminProtectedRoute from './Components/AdminProtectedRoute';
+import AboutUs from './Components/AboutUs';
 
 // Pages
 import HomePage from './pages/HomePage';
@@ -25,6 +26,7 @@ import JobManagement from './pages/JobManagement';
 import LaborerDashboard from './pages/LaborerDashboard';
 import LaborerRatings from './pages/LaborerRatings';
 import UserDashboard from './pages/UserDashboard';
+import UserComplaints from './pages/UserComplaints';
 import AdminLogin from './pages/AdminLogin';
 import AdminDashboard from './pages/AdminDashboard';
 import AdminProfile from './pages/AdminProfile';
@@ -34,10 +36,14 @@ import ErrorBoundary from './Components/ErrorBoundary';
 import JobListing from './Components/JobListing';
 import LaborerProfile from './Components/LaborerProfile';
 import ChatInterface from './Components/ChatInterface';
+import Portfolio from './Components/Portfolio';
+import Documents from './Components/Documents';
+import Complaints from './Components/Complaints';
 
 // Styles
 import './styles/App.css';
 import './styles/components.css';
+
 
 // Component to conditionally render layout
 const AppLayout = ({ children }) => {
@@ -89,6 +95,11 @@ const App = () => {
               <Route path="/otp-verification" element={
                 <AppLayout>
                   <OTPVerificationPage />
+                </AppLayout>
+              } />
+              <Route path="/about" element={
+                <AppLayout>
+                 <AboutUs />
                 </AppLayout>
               } />
               <Route path="/test-otp" element={
@@ -163,10 +174,52 @@ const App = () => {
                   </ProtectedRoute>
                 </AppLayout>
               } />
+              <Route path="/laborer-dashboard/myRatings" element={
+                <AppLayout>
+                  <ProtectedRoute>
+                    <LaborerRatings />
+                  </ProtectedRoute>
+                </AppLayout>
+              } />
               <Route path="/user-dashboard" element={
                 <AppLayout>
                   <ProtectedRoute>
                     <UserDashboard />
+                  </ProtectedRoute>
+                </AppLayout>
+              } />
+              <Route path="/user-Complaints" element={
+                <AppLayout>
+                  <ProtectedRoute>
+                    <UserComplaints />
+                  </ProtectedRoute>
+                </AppLayout>
+              } />
+              <Route path="/myRatings" element={
+                <AppLayout>
+                  <ProtectedRoute>
+                    <LaborerRatings />
+                  </ProtectedRoute>
+                </AppLayout>
+              } />
+              <Route path="/portfolio" element={
+                <AppLayout>
+                  <ProtectedRoute>
+                    <Portfolio />
+                  </ProtectedRoute>
+                </AppLayout>
+              } />
+              <Route path="/documents" element={
+                <AppLayout>
+                  <ProtectedRoute>
+                    <Documents/>
+                  </ProtectedRoute>
+                </AppLayout>
+              } />
+              <Route path="/complaints" element={
+                <AppLayout>
+                  <ProtectedRoute>
+                    <Complaints />
                   </ProtectedRoute>
                 </AppLayout>
               } />
@@ -180,6 +233,13 @@ const App = () => {
               <Route path="/laborer-profile" element={
                 <AppLayout>
                   <LaborerProfile />
+                </AppLayout>
+              } />
+              <Route path="/laborers/:id" element={
+                <AppLayout>
+                  <React.Suspense fallback={<div>Loading...</div>}>
+                    <LaborerProfile />
+                  </React.Suspense>
                 </AppLayout>
               } />
               <Route path="/help" element={
