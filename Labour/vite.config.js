@@ -1,3 +1,5 @@
+/* eslint-disable no-unused-vars */
+/* eslint-disable no-undef */
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
@@ -53,6 +55,10 @@ export default defineConfig({
   },
   define: {
     // Make environment variables available at build time
-    __DEV__: JSON.stringify(process.env.NODE_ENV === 'development')
+    // eslint-disable-next-line no-undef
+    __DEV__: JSON.stringify(process.env.NODE_ENV === 'development'),
+    __API_BASE_URL__: JSON.stringify(process.env.VITE_API_BASE_URL || 'http://localhost:8080'),
+    // Enable process.env access in the browser
+    'process.env': {}
   }
 });

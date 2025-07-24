@@ -17,7 +17,22 @@ class AdminAuthService {
       
       return response.data;
     } catch (error) {
-      const errorMessage = error.response?.data?.message || 'Login failed. Please try again.';
+      // Handle CORS and network errors specifically
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('CORS')) {
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+      
+      // Handle 403 Forbidden errors
+      if (error.response?.status === 403) {
+        throw new Error('Admin access forbidden. Please check your credentials or contact support.');
+      }
+      
+      // Handle 401 Unauthorized errors
+      if (error.response?.status === 401) {
+        throw new Error('Invalid admin credentials. Please try again.');
+      }
+      
+      const errorMessage = error.response?.data?.message || error.message || 'Admin login failed. Please try again.';
       throw new Error(errorMessage);
     }
   }
@@ -98,6 +113,21 @@ class AdminAuthService {
       const response = await adminAxiosInstance.get('/admin/auth/me');
       return response.data;
     } catch (error) {
+      // Handle CORS and network errors specifically
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('CORS')) {
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+      
+      // Handle 403 Forbidden errors
+      if (error.response?.status === 403) {
+        throw new Error('Admin access forbidden. Please login again.');
+      }
+      
+      // Handle 401 Unauthorized errors
+      if (error.response?.status === 401) {
+        throw new Error('Admin session expired. Please login again.');
+      }
+      
       throw new Error('Failed to get admin information.');
     }
   }

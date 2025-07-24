@@ -75,13 +75,19 @@ export const preflightHandler = (req, res, next) => {
       return res.status(204).end();
     } else {
       // Reject preflight for invalid origins
-      if (config.NODE_ENV === 'development') {
-        console.log(`❌ CORS Preflight: Rejected for ${origin}`);
-      }
+      console.log(`❌ CORS Preflight: Rejected for ${origin}`);
+      console.log(`   Allowed origins: ${config.CORS_ORIGIN}`);
+      
       return res.status(403).json({ 
         error: 'CORS policy violation',
-        message: 'Origin not allowed',
-        origin: origin 
+        message: 'Origin not allowed by CORS policy',
+        origin: origin,
+        allowedOrigins: config.NODE_ENV === 'development' ? 
+          config.CORS_ORIGIN.split(',').map(o => o.trim()) : 
+          ['Contact administrator for allowed origins'],
+        hint: config.NODE_ENV === 'production' ? 
+          'Make sure your frontend domain is added to CORS_ORIGIN environment variable' :
+          'Check if your origin matches the allowed development origins'
       });
     }
   }
@@ -113,8 +119,28 @@ export const validateCorsOrigin = (origin) => {
     return true;
   }
   
-  // In production, be more strict but allow subdomain matching for configured domains
+  // Allow common deployment platforms in production
   if (config.NODE_ENV === 'production') {
+    const productionPatterns = [
+      /^https:\/\/.*\.vercel\.app$/,           // Vercel deployments
+      /^https:\/\/.*\.netlify\.app$/,         // Netlify deployments
+      /^https:\/\/.*\.herokuapp\.com$/,       // Heroku deployments
+      /^https:\/\/.*\.railway\.app$/,         // Railway deployments
+      /^https:\/\/.*\.render\.com$/,          // Render deployments
+      /^https:\/\/.*\.surge\.sh$/,            // Surge deployments
+      /^https:\/\/.*\.github\.io$/,           // GitHub Pages
+      /^https:\/\/.*\.firebaseapp\.com$/,     // Firebase hosting
+      /^https:\/\/.*\.web\.app$/,             // Firebase web app
+    ];
+    
+    for (const pattern of productionPatterns) {
+      if (pattern.test(origin)) {
+        console.log(`✅ CORS: Allowing production platform origin: ${origin}`);
+        return true;
+      }
+    }
+    
+    // Allow subdomain matching for configured domains
     for (const allowedOrigin of allowedOrigins) {
       if (allowedOrigin.startsWith('https://') && origin.endsWith(allowedOrigin.replace('https://', ''))) {
         console.log(`✅ CORS: Allowing subdomain origin: ${origin}`);

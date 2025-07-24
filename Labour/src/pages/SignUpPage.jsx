@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { handleApiError } from '../utils/errorHandler';
 
 const SignupPage = () => {
   const navigate = useNavigate();
@@ -71,7 +72,21 @@ const SignupPage = () => {
       await register(userData);
       navigate('/');
     } catch (error) {
-      setError(error.message || 'Registration failed. Please try again.');
+      const errorInfo = handleApiError(error, 'Registration');
+      setError(errorInfo.userMessage);
+      
+      // Show additional help for CORS errors
+      if (errorInfo.type === 'cors') {
+        console.log('CORS Error Help:', {
+          message: 'This appears to be a CORS/network issue during registration.',
+          suggestions: [
+            'Check if the backend server is running',
+            'Verify the API URL is correct',
+            'Check your internet connection',
+            'Try refreshing the page'
+          ]
+        });
+      }
     } finally {
       setLoading(false);
     }

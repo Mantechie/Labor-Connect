@@ -14,7 +14,19 @@ class AuthService {
       }
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      // Handle CORS and network errors specifically
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('CORS')) {
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+      
+      // Handle 403 Forbidden errors
+      if (error.response?.status === 403) {
+        throw new Error('Access forbidden. Please check your credentials or contact support.');
+      }
+      
+      // Handle other HTTP errors
+      const errorMessage = error.response?.data?.message || error.message || 'Login failed. Please try again.';
+      throw new Error(errorMessage);
     }
   }
 
@@ -31,7 +43,19 @@ class AuthService {
       }
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      // Handle CORS and network errors specifically
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('CORS')) {
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+      
+      // Handle 403 Forbidden errors
+      if (error.response?.status === 403) {
+        throw new Error('Registration not allowed. Please contact support.');
+      }
+      
+      // Handle other HTTP errors
+      const errorMessage = error.response?.data?.message || error.message || 'Registration failed. Please try again.';
+      throw new Error(errorMessage);
     }
   }
 
@@ -83,7 +107,24 @@ class AuthService {
       const response = await axiosInstance.get('/auth/me');
       return response.data;
     } catch (error) {
-      throw error.response?.data || error.message;
+      // Handle CORS and network errors specifically
+      if (error.code === 'ERR_NETWORK' || error.message?.includes('CORS')) {
+        throw new Error('Network error. Please check your connection and try again.');
+      }
+      
+      // Handle 403 Forbidden errors
+      if (error.response?.status === 403) {
+        throw new Error('Access forbidden. Please login again.');
+      }
+      
+      // Handle 401 Unauthorized errors
+      if (error.response?.status === 401) {
+        throw new Error('Session expired. Please login again.');
+      }
+      
+      // Handle other HTTP errors
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to get user information.';
+      throw new Error(errorMessage);
     }
   }
 

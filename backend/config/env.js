@@ -33,6 +33,7 @@ const config = {
   MAX_FILE_SIZE: process.env.MAX_FILE_SIZE || 5242880, // 5MB
   
   // CORS Configuration - supports multiple origins separated by commas
+  // In production, add your deployed frontend URL to CORS_ORIGIN environment variable
   CORS_ORIGIN: process.env.CORS_ORIGIN || 'http://localhost:5173,http://localhost:3000,http://localhost:5174,http://127.0.0.1:5173,http://127.0.0.1:3000,http://127.0.0.1:5174',
   CORS_CREDENTIALS: process.env.CORS_CREDENTIALS === 'true' || true,
   CORS_MAX_AGE: process.env.CORS_MAX_AGE || 86400,

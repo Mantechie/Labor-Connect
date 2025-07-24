@@ -28,17 +28,26 @@ export const AuthProvider = ({ children }) => {
             const response = await authService.getCurrentUser();
             setUser(response.user);
           } catch (error) {
-            // Only logout if it's a clear authentication error
+            // Handle different types of errors appropriately
             if (error.message?.includes('token') || 
                 error.message?.includes('auth') ||
                 error.message?.includes('unauthorized') ||
-                error.status === 401) {
-              console.log('Token expired, logging out...');
+                error.message?.includes('Session expired') ||
+                error.message?.includes('Access forbidden') ||
+                error.status === 401 || 
+                error.status === 403) {
+              console.log('Authentication error, logging out:', error.message);
               authService.logout();
               setUser(null);
+            } else if (error.message?.includes('Network error') || 
+                       error.message?.includes('CORS') ||
+                       error.code === 'ERR_NETWORK') {
+              // For network/CORS errors, keep user logged in but show warning
+              console.log('Network/CORS error, keeping user logged in:', error.message);
+              setUser(storedUser);
             } else {
-              // For other errors (network, server down), keep the user logged in
-              console.log('Network error, keeping user logged in:', error.message);
+              // For other errors (server down), keep the user logged in
+              console.log('Server error, keeping user logged in:', error.message);
               setUser(storedUser);
             }
           }

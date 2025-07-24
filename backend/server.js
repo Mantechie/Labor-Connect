@@ -125,6 +125,28 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// CORS test endpoint
+app.get('/api/cors-test', (req, res) => {
+  const origin = req.get('Origin');
+  res.json({
+    message: 'CORS test successful',
+    origin: origin || 'no-origin',
+    timestamp: new Date().toISOString(),
+    corsConfig: {
+      allowedOrigins: config.CORS_ORIGIN.split(',').map(o => o.trim()),
+      credentials: config.CORS_CREDENTIALS,
+      environment: config.NODE_ENV
+    }
+  });
+});
+
+// CORS preflight test endpoint
+app.options('/api/cors-test', (req, res) => {
+  const origin = req.get('Origin');
+  console.log(`🧪 CORS Test Preflight from: ${origin}`);
+  res.status(204).end();
+});
+
 // API Routes - Mount more specific routes BEFORE general ones
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);

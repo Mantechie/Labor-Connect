@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useToast } from '../Components/ToastContext';
 import adminAuthService from '../services/adminAuthService';
+import { handleApiError } from '../utils/errorHandler';
 import { 
   Container, 
   Row, 
@@ -56,8 +57,22 @@ const AdminLogin = () => {
       const from = location.state?.from?.pathname || '/admin/dashboard';
       navigate(from, { replace: true });
     } catch (error) {
-      setError(error.message || 'Login failed');
-      showToast(error.message || 'Login failed', 'danger');
+      const errorInfo = handleApiError(error, 'Admin Login');
+      setError(errorInfo.userMessage);
+      showToast(errorInfo.userMessage, 'danger');
+      
+      // Show additional help for CORS errors
+      if (errorInfo.type === 'cors') {
+        console.log('Admin CORS Error Help:', {
+          message: 'This appears to be a CORS/network issue with admin login.',
+          suggestions: [
+            'Check if the backend server is running',
+            'Verify the admin API URL is correct',
+            'Check your internet connection',
+            'Contact system administrator if issue persists'
+          ]
+        });
+      }
     } finally {
       setLoading(false);
     }

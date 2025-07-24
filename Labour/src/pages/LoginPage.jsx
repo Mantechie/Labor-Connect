@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { handleApiError } from '../utils/errorHandler';
 
 const LoginPage = () => {
   const navigate = useNavigate();
@@ -39,7 +40,21 @@ const LoginPage = () => {
       const from = location.state?.from?.pathname || '/';
       navigate(from, { replace: true });
     } catch (error) {
-      setError(error.message || 'Login failed. Please try again.');
+      const errorInfo = handleApiError(error, 'Login');
+      setError(errorInfo.userMessage);
+      
+      // Show additional help for CORS errors
+      if (errorInfo.type === 'cors') {
+        console.log('CORS Error Help:', {
+          message: 'This appears to be a CORS/network issue.',
+          suggestions: [
+            'Check if the backend server is running',
+            'Verify the API URL is correct',
+            'Check your internet connection',
+            'Try refreshing the page'
+          ]
+        });
+      }
     } finally {
       setLoading(false);
     }

@@ -1,168 +1,120 @@
-/**
- * CORS Testing Utility for Frontend
- * This utility helps test and debug CORS issues from the frontend
- */
+// CORS Test Utility
+// Use this to test if your backend CORS is configured correctly
 
-import axiosInstance from './axiosInstance';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
 
-export class CorsTestUtil {
-  static async testConnection() {
-    console.log('🧪 Starting CORS Connection Test...');
+export const testCorsConnection = async () => {
+  console.log('🧪 Testing CORS connection...');
+  console.log('Frontend Origin:', window.location.origin);
+  console.log('API Base URL:', API_BASE_URL);
+  
+  try {
+    // Test simple GET request
+    const response = await fetch(`${API_BASE_URL}/cors-test`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include' // Important for CORS with credentials
+    });
     
-    const results = {
-      timestamp: new Date().toISOString(),
-      environment: import.meta.env.VITE_NODE_ENV || 'development',
-      baseURL: import.meta.env.VITE_API_BASE_URL || '/api',
-      backendURL: import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080',
-      tests: []
-    };
-
-    // Test 1: Health Check
-    try {
-      console.log('📡 Testing health endpoint...');
-      const healthResponse = await axiosInstance.get('/health');
-      results.tests.push({
-        name: 'Health Check',
-        status: 'PASS',
-        response: healthResponse.data,
-        statusCode: healthResponse.status
-      });
-      console.log('✅ Health check passed');
-    } catch (error) {
-      results.tests.push({
-        name: 'Health Check',
-        status: 'FAIL',
-        error: error.message,
-        statusCode: error.response?.status,
-        isCorsError: error.isCorsError || false
-      });
-      console.error('❌ Health check failed:', error.message);
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ CORS Test Successful:', data);
+      return { success: true, data };
+    } else {
+      console.error('❌ CORS Test Failed:', response.status, response.statusText);
+      const errorData = await response.text();
+      return { success: false, error: errorData, status: response.status };
     }
-
-    // Test 2: Preflight Request (OPTIONS)
-    try {
-      console.log('🔄 Testing preflight request...');
-      const preflightResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL || 'http://localhost:8080'}/api/health`, {
-        method: 'OPTIONS',
-        headers: {
-          'Origin': window.location.origin,
-          'Access-Control-Request-Method': 'GET',
-          'Access-Control-Request-Headers': 'Content-Type, Authorization'
-        }
-      });
-      
-      results.tests.push({
-        name: 'Preflight Request',
-        status: preflightResponse.ok ? 'PASS' : 'FAIL',
-        statusCode: preflightResponse.status,
-        headers: {
-          'access-control-allow-origin': preflightResponse.headers.get('access-control-allow-origin'),
-          'access-control-allow-methods': preflightResponse.headers.get('access-control-allow-methods'),
-          'access-control-allow-headers': preflightResponse.headers.get('access-control-allow-headers'),
-          'access-control-allow-credentials': preflightResponse.headers.get('access-control-allow-credentials')
-        }
-      });
-      console.log('✅ Preflight request passed');
-    } catch (error) {
-      results.tests.push({
-        name: 'Preflight Request',
-        status: 'FAIL',
-        error: error.message,
-        isCorsError: true
-      });
-      console.error('❌ Preflight request failed:', error.message);
-    }
-
-    // Test 3: Direct Backend Connection (without proxy)
-    if (import.meta.env.VITE_BACKEND_URL) {
-      try {
-        console.log('🔗 Testing direct backend connection...');
-        const directResponse = await fetch(`${import.meta.env.VITE_BACKEND_URL}/api/health`, {
-          method: 'GET',
-          headers: {
-            'Content-Type': 'application/json',
-            'Origin': window.location.origin
-          },
-          credentials: 'include'
-        });
-        
-        const data = await directResponse.json();
-        results.tests.push({
-          name: 'Direct Backend Connection',
-          status: directResponse.ok ? 'PASS' : 'FAIL',
-          response: data,
-          statusCode: directResponse.status
-        });
-        console.log('✅ Direct backend connection passed');
-      } catch (error) {
-        results.tests.push({
-          name: 'Direct Backend Connection',
-          status: 'FAIL',
-          error: error.message,
-          isCorsError: error.message?.includes('CORS') || error.message?.includes('Network Error')
-        });
-        console.error('❌ Direct backend connection failed:', error.message);
-      }
-    }
-
-    // Summary
-    const passedTests = results.tests.filter(test => test.status === 'PASS').length;
-    const totalTests = results.tests.length;
-    const corsErrors = results.tests.filter(test => test.isCorsError).length;
-
-    console.log(`\n📊 CORS Test Summary:`);
-    console.log(`   Passed: ${passedTests}/${totalTests}`);
-    console.log(`   CORS Errors: ${corsErrors}`);
-    console.log(`   Environment: ${results.environment}`);
-    console.log(`   Base URL: ${results.baseURL}`);
-    
-    if (corsErrors > 0) {
-      console.log(`\n🔧 CORS Issues Detected:`);
-      console.log(`   1. Check if backend server is running on port 8080`);
-      console.log(`   2. Verify CORS_ORIGIN in backend .env includes: ${window.location.origin}`);
-      console.log(`   3. Check browser console for detailed CORS errors`);
-    }
-
-    return results;
+  } catch (error) {
+    console.error('❌ CORS Test Error:', error);
+    return { success: false, error: error.message };
   }
+};
 
-  static async testAuthenticatedRequest() {
-    console.log('🔐 Testing authenticated request...');
+export const testCorsWithAuth = async () => {
+  console.log('🧪 Testing CORS with authentication...');
+  
+  try {
+    // Test with Authorization header (simulates login request)
+    const response = await fetch(`${API_BASE_URL}/cors-test`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer test-token'
+      },
+      credentials: 'include'
+    });
     
-    try {
-      // This will test with auth headers if token exists
-      const response = await axiosInstance.get('/auth/profile');
-      console.log('✅ Authenticated request successful');
-      return { success: true, data: response.data };
-    } catch (error) {
-      console.error('❌ Authenticated request failed:', error.message);
-      return { 
-        success: false, 
-        error: error.message,
-        isCorsError: error.isCorsError || false,
-        statusCode: error.response?.status
-      };
+    if (response.ok) {
+      const data = await response.json();
+      console.log('✅ CORS Auth Test Successful:', data);
+      return { success: true, data };
+    } else {
+      console.error('❌ CORS Auth Test Failed:', response.status, response.statusText);
+      const errorData = await response.text();
+      return { success: false, error: errorData, status: response.status };
+    }
+  } catch (error) {
+    console.error('❌ CORS Auth Test Error:', error);
+    return { success: false, error: error.message };
+  }
+};
+
+export const testPreflightRequest = async () => {
+  console.log('🧪 Testing CORS preflight request...');
+  
+  try {
+    // This will trigger a preflight request
+    const response = await fetch(`${API_BASE_URL}/auth/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      credentials: 'include',
+      body: JSON.stringify({}) // Empty body to test preflight
+    });
+    
+    // We expect this to fail with validation error, but CORS should work
+    console.log('✅ Preflight Request Completed (status:', response.status, ')');
+    return { success: true, status: response.status };
+  } catch (error) {
+    if (error.message.includes('CORS') || error.message.includes('preflight')) {
+      console.error('❌ CORS Preflight Failed:', error);
+      return { success: false, error: error.message, type: 'cors' };
+    } else {
+      console.log('✅ Preflight OK (validation error expected):', error.message);
+      return { success: true, error: error.message, type: 'validation' };
     }
   }
+};
 
-  static logEnvironmentInfo() {
-    console.log('🌍 Environment Information:');
-    console.log(`   NODE_ENV: ${import.meta.env.VITE_NODE_ENV}`);
-    console.log(`   API Base URL: ${import.meta.env.VITE_API_BASE_URL}`);
-    console.log(`   Backend URL: ${import.meta.env.VITE_BACKEND_URL}`);
-    console.log(`   Current Origin: ${window.location.origin}`);
-    console.log(`   Debug Enabled: ${import.meta.env.VITE_ENABLE_DEBUG}`);
-    console.log(`   Console Logs: ${import.meta.env.VITE_SHOW_CONSOLE_LOGS}`);
+// Run all CORS tests
+export const runAllCorsTests = async () => {
+  console.log('🚀 Running all CORS tests...');
+  
+  const results = {
+    basicCors: await testCorsConnection(),
+    authCors: await testCorsWithAuth(),
+    preflight: await testPreflightRequest()
+  };
+  
+  console.log('📊 CORS Test Results:', results);
+  
+  const allPassed = results.basicCors.success && 
+                   results.authCors.success && 
+                   results.preflight.success;
+  
+  if (allPassed) {
+    console.log('🎉 All CORS tests passed! Your backend is properly configured.');
+  } else {
+    console.log('⚠️ Some CORS tests failed. Check the results above.');
   }
-}
+  
+  return results;
+};
 
-// Auto-run basic test in development
-if (import.meta.env.VITE_NODE_ENV === 'development' && import.meta.env.VITE_ENABLE_DEBUG === 'true') {
-  // Run test after a short delay to ensure app is loaded
-  setTimeout(() => {
-    CorsTestUtil.logEnvironmentInfo();
-    CorsTestUtil.testConnection();
-  }, 2000);
-}
-
-export default CorsTestUtil;
+// Usage in browser console:
+// import { runAllCorsTests } from './utils/corsTest.js';
+// runAllCorsTests();
