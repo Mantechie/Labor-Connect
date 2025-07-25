@@ -19,20 +19,32 @@
   "dependencies": {
     "bcryptjs": "^3.0.2",
     "cors": "^2.8.5",
+    "csurf": "^1.11.0",
     "dotenv": "^16.5.0",
     "ejs": "^3.1.10",
     "express": "^4.19.2",
     "express-async-handler": "^1.2.0",
+    "express-rate-limit": "^8.0.1",
+    "express-validator": "^7.2.1",
+    "file-type": "^21.0.0",
+    "helmet": "^8.1.0",
+    "json-reader": "^1.0.7",
+    "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.2",
     "mongoose": "^8.16.0",
     "morgan": "^1.10.0",
     "multer": "^2.0.1",
+    "node-cache": "^5.1.2",
     "node-fetch": "^3.3.2",
     "nodemailer": "^7.0.3",
+    "ratelimiter": "^3.4.1",
     "socket.io": "^4.7.4",
-    "twilio": "^5.7.1"
+    "twilio": "^5.7.1",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0"
   },
   "devDependencies": {
+    "@express-rate-limit/tsconfig": "^1.0.2",
     "nodemon": "^3.1.10"
   }
 }

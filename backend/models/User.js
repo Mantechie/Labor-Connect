@@ -17,6 +17,15 @@ const userSchema = new mongoose.Schema(
       type: String,
       required: true,
     },
+    passwordHistory: {
+      type: [String],
+      default: [],
+      select: false // Don't include in normal queries
+    },
+    passwordLastChanged: {
+      type: Date,
+      default: Date.now
+    },
     phone: {
       type: String,
       required: false, // Make phone optional for now

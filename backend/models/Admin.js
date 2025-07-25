@@ -189,6 +189,18 @@ const adminSchema = new mongoose.Schema({
     default: null
   },
   
+  // Add to Admin model schema
+  passwordHistory: {
+    type: [String],
+    default: [],
+    select: false
+  },
+
+  passwordChangedAt: {
+    type: Date,
+    default: Date.now
+  },
+
   // Two-factor authentication
   twoFactorEnabled: {
     type: Boolean,

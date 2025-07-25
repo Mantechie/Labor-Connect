@@ -1,5 +1,6 @@
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
+// Admin Authentication Controller
+import bcrypt from 'bcryptjs'; // Password hashing
+import jwt from 'jsonwebtoken'; 
 import Admin from '../models/Admin.js';
 import OTP from '../models/OTP.js';
 import generateOTP from '../utils/generateOTP.js';
@@ -13,21 +14,21 @@ dotenv.config();
 // Generate JWT for admin
 const generateAdminToken = (id, role) => {
   return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-    expiresIn: '30d',
+    expiresIn: '30m',
   });
 };
 
 // Generate refresh token for admin
 const generateAdminRefreshToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '60d',
+    expiresIn: '7d',
   });
 };
 
 // @desc    Register new admin (super admin only)
 // @route   POST /api/admin-auth/register
 // @access  Super Admin only
-export const registerAdmin = async (req, res) => {
+/*export const registerAdmin = async (req, res) => {
   try {
     const { name, email, password, phone, role, department, permissions } = req.body;
 
@@ -83,7 +84,7 @@ export const registerAdmin = async (req, res) => {
     console.error('Admin registration error:', err);
     res.status(500).json({ message: err.message });
   }
-};
+};*/
 
 // @desc    Admin login
 // @route   POST /api/admin/auth/login
@@ -147,6 +148,21 @@ export const adminLogin = async (req, res) => {
     const token = generateAdminToken(admin._id, admin.role);
     const refreshToken = generateAdminRefreshToken(admin._id);
 
+
+    // Set tokens as HttpOnly cookies
+    res.cookie('accessToken', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 30 * 60 * 1000 // 30 minutes
+    });
+
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
+    });
     // Store tokens in database
     await admin.setToken(token, 30); // 30 minutes expiry
     admin.refreshToken = refreshToken;
@@ -762,7 +778,7 @@ export const changePassword = async (req, res) => {
       message: `Admin ${admin.name} (${admin.email}) has successfully changed their password. All sessions have been terminated.`,
       excludeAdminId: admin._id
     });
-
+    
     // Log the successful action
     await AdminLog.createLog({
       adminId: admin._id,
@@ -782,6 +798,36 @@ export const changePassword = async (req, res) => {
     console.error('Error changing password:', error);
     res.status(500).json({ message: 'Failed to change password' });
   }
+
+  // In changePassword function, after validating current password
+  // Check if new password is in history
+  const admin = await Admin.findById(adminId).select('+passwordHistory');
+
+  // Get password history or initialize empty array
+  const passwordHistory = admin.passwordHistory || [];
+
+  // Check if new password matches any in history
+  for (const oldPassword of passwordHistory) {
+    const isMatch = await bcrypt.compare(newPassword, oldPassword);
+    if (isMatch) {
+      return res.status(400).json({ 
+        message: 'New password cannot be the same as any of your recent passwords' 
+      });
+    }
+  }
+
+  // Hash new password
+  const salt = await bcrypt.genSalt(10);
+  const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+  // Add current password to history before changing
+  passwordHistory.unshift(admin.password);
+
+  // Keep only last 5 passwords in history
+  admin.passwordHistory = passwordHistory.slice(0, 5);
+  admin.password = hashedPassword;
+  admin.passwordChangedAt = Date.now();
+
 };
 
 // @desc    Upload admin profile picture
@@ -793,9 +839,12 @@ export const uploadAdminProfilePicture = async (req, res) => {
       return res.status(400).json({ message: 'Profile picture is required' });
     }
     
-    // Validate file type
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif'];
-    if (!allowedTypes.includes(req.file.mimetype)) {
+    // Validate file type using file-type package instead of just mimetype
+    const fileBuffer = req.file.buffer;
+    const fileTypeResult = await fileType.fromBuffer(fileBuffer);
+    
+    // Check if file type could be determined and is an allowed image type
+    if (!fileTypeResult || !['image/jpeg', 'image/png', 'image/gif'].includes(fileTypeResult.mime)) {
       return res.status(400).json({ message: 'Only JPEG, PNG, and GIF images are allowed' });
     }
     
@@ -804,8 +853,21 @@ export const uploadAdminProfilePicture = async (req, res) => {
       return res.status(400).json({ message: 'File size must be less than 5MB' });
     }
     
-    const profilePicture = `/uploads/admin/${req.file.filename}`;
+    // Generate a unique filename with timestamp and random string
+    const timestamp = Date.now();
+    const randomString = crypto.randomBytes(16).toString('hex');
+    const extension = fileTypeResult.ext;
+    const filename = `admin_${req.admin._id}_${timestamp}_${randomString}.${extension}`;
     
+    // Save file path
+    const profilePicture = `/uploads/admin/${filename}`;
+    
+    // Save file to disk
+    const filePath = path.join(process.env.UPLOAD_PATH, 'admin', filename);
+    await fs.promises.mkdir(path.dirname(filePath), { recursive: true });
+    await fs.promises.writeFile(filePath, fileBuffer);
+    
+    // Update admin record
     const updatedAdmin = await Admin.findByIdAndUpdate(
       req.admin._id,
       { profilePicture },
@@ -813,7 +875,15 @@ export const uploadAdminProfilePicture = async (req, res) => {
     ).select('-password -refreshToken');
     
     // Log the action
-    updatedAdmin.logAction('profile_picture_update', 'self', 'Profile picture updated');
+    await AdminLog.createLog({
+      adminId: req.admin._id,
+      action: 'PROFILE_PICTURE_UPDATE',
+      details: 'Profile picture updated',
+      severity: 'LOW',
+      status: 'SUCCESS',
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent')
+    });
     
     res.json({
       message: 'Profile picture updated successfully',
@@ -828,7 +898,7 @@ export const uploadAdminProfilePicture = async (req, res) => {
 // @desc    Get admin collaborators
 // @route   GET /api/admin/auth/collaborators
 // @access  Admin only
-export const getAdminCollaborators = async (req, res) => {
+/*export const getAdminCollaborators = async (req, res) => {
   try {
     const collaborators = await Admin.getActiveCollaborators();
     
@@ -933,4 +1003,4 @@ export const removeAdminCollaborator = async (req, res) => {
     console.error('Remove admin collaborator error:', error);
     res.status(500).json({ message: 'Failed to remove collaborator' });
   }
-}; 
+}; */

@@ -15,6 +15,23 @@ const connectDB = async () => {
     console.error(`❌ MongoDB connection error: ${error.message}`)
     process.exit(1)
   }
+
+  try {
+    const conn = await mongoose.connect(process.env.MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      ssl: process.env.NODE_ENV === 'production', // Enable SSL in production
+      sslValidate: process.env.NODE_ENV === 'production',
+      retryWrites: true,
+      w: 'majority'
+    });
+    
+    console.log(`MongoDB Connected: ${conn.connection.host}`);
+  } catch (error) {
+    console.error(`Error connecting to MongoDB: ${error.message}`);
+    process.exit(1);
+  }
+
 }
 
 export default connectDB

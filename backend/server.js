@@ -22,7 +22,8 @@ import path from 'path'
 import { fileURLToPath } from 'url'
 import reportRoutes from './routes/reportRoutes.js';
 import jobApplicationRoutes from './routes/jobApplicationRoutes.js';
-
+import helmet from 'helmet';
+import { rateLimit } from 'express-rate-limit';
 
 // Connect to MongoDB
 connectDB()
@@ -106,6 +107,25 @@ app.use(cors({
 app.use(credentialsMiddleware);
 app.use(preflightHandler);
 
+// Apply Helmet middleware for security headers
+app.use(helmet());
+
+// Configure Content Security Policy
+app.use(
+  helmet.contentSecurityPolicy({
+    directives: {
+      defaultSrc: ["'self'"],
+      scriptSrc: ["'self'", "'unsafe-inline'"],
+      styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+      fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+      imgSrc: ["'self'", 'data:', 'https://secure.gravatar.com'],
+      connectSrc: ["'self'"],
+      frameSrc: ["'none'"],
+      objectSrc: ["'none'"]
+    }
+  })
+);
+
 // Use different logging based on environment
 if (process.env.NODE_ENV === 'production') {
   app.use(morgan('combined'));
@@ -113,8 +133,33 @@ if (process.env.NODE_ENV === 'production') {
   app.use(morgan('dev'));
 }
 
+// Add HSTS header in production
+if (process.env.NODE_ENV === 'production') {
+  app.use(
+    helmet.hsts({
+      maxAge: 31536000, // 1 year in seconds
+      includeSubDomains: true,
+      preload: true
+    })
+  );
+}
+
+// Force HTTPS in production
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (req.header('x-forwarded-proto') !== 'https') {
+      res.redirect(`https://${req.header('host')}${req.url}`);
+    } else {
+      next();
+    }
+  });
+}
+
 // Serve static files
 app.use('/uploads', express.static('uploads'))
+
+// Global error handler - must be after all routes
+app.use(errorHandler);
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -122,6 +167,16 @@ app.get('/api/health', (req, res) => {
     status: 'OK', 
     message: 'Server is running',
     timestamp: new Date().toISOString()
+  });
+});
+
+app.get('/health', (req, res) => {
+  res.status(200).json({
+    status: 'UP',
+    timestamp: new Date(),
+    uptime: process.uptime(),
+    environment: process.env.NODE_ENV,
+    version: process.env.npm_package_version || '1.0.0'
   });
 });
 
@@ -154,6 +209,17 @@ app.use('/api/users', userRoutes);
 // IMPORTANT: Mount admin auth routes BEFORE admin routes
 // This prevents the admin middleware from being applied to auth routes
 app.use('/api/admin/auth', adminAuthRoutes);
+
+// Force HTTPS in production
+if (process.env.NODE_ENV === 'production') {
+  app.use((req, res, next) => {
+    if (req.header('x-forwarded-proto') !== 'https') {
+      res.redirect(`https://${req.header('host')}${req.url}`);
+    } else {
+      next();
+    }
+  });
+}
 
 // Mount more specific admin routes BEFORE general admin routes
 app.use('/api/admin/users', (req, res, next) => {

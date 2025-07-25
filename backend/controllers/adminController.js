@@ -5,70 +5,87 @@ import User from '../models/User.js';
 import Job from '../models/Job.js';
 import JobApplication from '../models/JobApplication.js';
 import Review from '../models/Review.js';
+import Report from '../models/Report.js';
 import Admin from '../models/Admin.js';
+import config from '../config/index.js';
+import { statsCache, analyticsCache } from '../utils/cache.js';
+import { getAdminStatsService, getUsersService } from '../services/adminService.js';
+import { handleControllerError } from '../utils/errorhandlerutil.js';
+import { Parser } from 'json2csv';
+import { Readable } from 'stream';
+import sendEmail from '../utils/sendEmail.js';
+import sendSMS from '../utils/sendSMS.js';
 
 // @desc    Get admin dashboard stats
 // @route   GET /api/admin/stats
 // @access  Admin only
 export const getAdminStats = async (req, res) => {
   try {
-    // Get total users (excluding admins)
-    const totalUsers = await User.countDocuments({ role: 'user' });
-    
-    // Get verified laborers
-    const verifiedLaborers = await User.countDocuments({ 
-      role: 'laborer', 
-      isVerified: true 
-    });
-    
-    // Get pending verification requests
-    const pendingRequests = await User.countDocuments({ 
-      role: 'laborer', 
-      isVerified: false 
-    });
-    
-    // Get total job posts
+    // Get all stats in a single aggregation pipeline
+    const statsResults = await User.aggregate([
+      {
+        $facet: {
+          // Total users (excluding admins)
+          totalUsers: [
+            { $match: { role: 'user' } },
+            { $count: 'count' }
+          ],
+          // Verified laborers
+          verifiedLaborers: [
+            { $match: { role: 'laborer', isVerified: true } },
+            { $count: 'count' }
+          ],
+          // Pending verification requests
+          pendingRequests: [
+            { $match: { role: 'laborer', isVerified: false } },
+            { $count: 'count' }
+          ],
+          // Active laborers
+          activeLaborers: [
+            { $match: { role: 'laborer', availability: 'available' } },
+            { $count: 'count' }
+          ],
+          // Inactive laborers
+          inactiveLaborers: [
+            { $match: { role: 'laborer', availability: { $ne: 'available' } } },
+            { $count: 'count' }
+          ],
+          // Average rating calculation
+          avgRating: [
+            { $match: { role: 'laborer', rating: { $gt: 0 } } },
+            { $group: { _id: null, avg: { $avg: '$rating' } } }
+          ]
+        }
+      }
+    ]);
+
+    // Get total job posts in a separate query (different collection)
     const totalJobPosts = await Job.countDocuments();
     
-    // Calculate average rating
-    const laborersWithRatings = await User.find({ 
-      role: 'laborer', 
-      rating: { $gt: 0 } 
-    });
+    // Extract values from aggregation results
+    const stats = {
+      totalUsers: statsResults[0].totalUsers[0]?.count || 0,
+      verifiedLaborers: statsResults[0].verifiedLaborers[0]?.count || 0,
+      pendingRequests: statsResults[0].pendingRequests[0]?.count || 0,
+      activeLaborers: statsResults[0].activeLaborers[0]?.count || 0,
+      inactiveLaborers: statsResults[0].inactiveLaborers[0]?.count || 0,
+      avgRating: statsResults[0].avgRating[0]?.avg || 0,
+      totalJobPosts,
+      complaintsReceived: 0 // Mock data to be replaced with actual implementation
+    };
     
-    const avgRating = laborersWithRatings.length > 0 
-      ? laborersWithRatings.reduce((sum, laborer) => sum + laborer.rating, 0) / laborersWithRatings.length
-      : 0;
-    
-    // Get active vs inactive laborers
-    const activeLaborers = await User.countDocuments({ 
-      role: 'laborer', 
-      availability: 'available' 
-    });
-    
-    const inactiveLaborers = await User.countDocuments({ 
-      role: 'laborer', 
-      availability: { $ne: 'available' } 
-    });
-    
-    // Mock complaints count (you can implement a complaints model later)
-    const complaintsReceived = 0;
-    
-    res.json({
-      stats: {
-        totalUsers,
-        verifiedLaborers,
-        pendingRequests,
-        totalJobPosts,
-        avgRating,
-        complaintsReceived,
-        activeLaborers,
-        inactiveLaborers
-      }
-    });
+    // Check cache first
+    const cachedStats = statsCache.get('adminStats');
+    if (cachedStats) {
+      return res.json({ stats: cachedStats, fromCache: true });
+    }
+
+    // Store in cache
+    statsCache.set('adminStats', stats);
+  
+    res.json({ stats });
   } catch (error) {
-    console.error('Get admin stats error:', error);
-    res.status(500).json({ message: 'Failed to fetch admin stats' });
+    handleControllerError(error, res, 'fetch admin stats');
   }
 };
 
@@ -122,42 +139,20 @@ export const getRecentActivity = async (req, res) => {
 // @access  Admin only
 export const getAllUsers = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search = '', role = '', status = '' } = req.query;
+    const { page = 1, limit = config.pagination.defaultLimit, search = '', role = '', status = '' } = req.query;
     
-    // Build filter query
-    const filter = {};
-    if (role) filter.role = role;
-    if (status === 'active') filter.isActive = true;
-    if (status === 'inactive') filter.isActive = false;
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    // Calculate pagination
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-    
-    // Get users with pagination
-    const users = await User.find(filter)
-      .select('-password')
-      .sort({ createdAt: -1 })
-      .skip(skip)
-      .limit(parseInt(limit));
-    
-    // Get total count
-    const total = await User.countDocuments(filter);
-    
-    res.json({
-      users,
-      total,
-      page: parseInt(page),
-      totalPages: Math.ceil(total / parseInt(limit))
+    // Use service to get users
+    const result = await getUsersService({ 
+      page, 
+      limit: Math.min(parseInt(limit), config.pagination.maxLimit), 
+      search, 
+      role, 
+      status 
     });
+    
+    res.json(result);
   } catch (error) {
-    console.error('Get all users error:', error);
-    res.status(500).json({ message: 'Failed to fetch users' });
+    handleControllerError(error, res, 'fetch users');
   }
 };
 
@@ -172,23 +167,34 @@ export const updateUserStatus = async (req, res) => {
     const { id } = req.params;
     const { isActive } = req.body;
     
+    // Check if user is an admin (prevent modifying other admins)
+    const userToUpdate = await User.findById(id).select('role');
+    
+    if (!userToUpdate) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Prevent modifying admin users unless current user is super admin
+    if (userToUpdate.role === 'admin' && req.user.role !== 'superadmin') {
+      return res.status(403).json({ 
+        success: false,
+        message: 'You are not authorized to modify admin users' 
+      });
+    }
+    
     const user = await User.findByIdAndUpdate(
       id,
       { isActive },
       { new: true, select: '-password' }
     );
     
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-    
     res.json({
+      success: true,
       message: `User ${isActive ? 'activated' : 'suspended'} successfully`,
       user
     });
   } catch (error) {
-    console.error('Update user status error:', error);
-    res.status(500).json({ message: 'Failed to update user status' });
+    handleControllerError(error, res, 'update user status');
   }
 };
 
@@ -205,7 +211,8 @@ export const verifyLaborer = async (req, res) => {
       { 
         isVerified,
         verificationDate: isVerified ? new Date() : null,
-        verificationNotes
+        verificationNotes, 
+        verifiedBy: isVerified ? req.user.id : null
       },
       { new: true, select: '-password' }
     );
@@ -213,15 +220,32 @@ export const verifyLaborer = async (req, res) => {
     if (!laborer) {
       return res.status(404).json({ message: 'Laborer not found' });
     }
+    // Send notification to laborer about verification status
+    if (laborer.email) {
+      const subject = isVerified 
+        ? 'Your account has been verified!' 
+        : 'Verification update on your account';
+        
+      const message = isVerified
+        ? 'Congratulations! Your account has been verified. You can now accept job offers.'
+        : `Your verification status has been updated. ${verificationNotes}`;
+        
+      await sendEmail({
+        to: laborer.email,
+        subject,
+        text: message,
+        html: `<p>Hello ${laborer.name},</p><p>${message}</p>`
+      });
+    }
     
     res.json({
+      success: true,
       message: `Laborer ${isVerified ? 'verified' : 'unverified'} successfully`,
       laborer
     });
   } catch (error) {
-    console.error('Verify laborer error:', error);
-    res.status(500).json({ message: 'Failed to verify laborer' });
-  }
+    handleControllerError(error, res, 'verify laborer');
+  } 
 };
 
 // @desc    Get job applications with details
@@ -418,7 +442,16 @@ export const getDocumentsAndVerifications = async (req, res) => {
 // @access  Admin only
 export const getReportsAndIssues = async (req, res) => {
   try {
-    const { page = 1, limit = 10, status = '', type = '' } = req.query;
+    const { page = 1, limit = 10, status = '', type = '', priority = '' } = req.query;
+    
+    // Build filter query
+    const filter = {};
+    if (status) filter.status = status;
+    if (type) filter.type = type;
+    if (priority) filter.priority = priority;
+    
+    // Calculate pagination
+    const skip = (parseInt(page) - 1) * parseInt(limit);
     
     // For now, return mock data since we don't have a Report model
     // You can implement a Report model later
@@ -449,30 +482,37 @@ export const getReportsAndIssues = async (req, res) => {
       }
     ];
     
-    // Filter mock data
-    let filteredReports = mockReports;
-    if (status) {
-      filteredReports = filteredReports.filter(report => report.status === status);
-    }
-    if (type) {
-      filteredReports = filteredReports.filter(report => report.type === type);
-    }
+  // Get reports with details
+    const reports = await Report.find(filter)
+      .populate('reportedBy', 'name email')
+      .populate('reportedUser', 'name email')
+      .populate('assignedTo', 'name email')
+      .sort({ createdAt: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
     
-    // Pagination
-    const total = filteredReports.length;
-    const startIndex = (parseInt(page) - 1) * parseInt(limit);
-    const endIndex = startIndex + parseInt(limit);
-    const paginatedReports = filteredReports.slice(startIndex, endIndex);
+    // Get total count
+    const total = await Report.countDocuments(filter);
+    
+    // Get report statistics
+    const reportStats = await Report.aggregate([
+      {
+        $group: {
+          _id: '$status',
+          count: { $sum: 1 }
+        }
+      }
+    ]);
     
     res.json({
-      reports: paginatedReports,
+      reports,
       total,
       page: parseInt(page),
-      totalPages: Math.ceil(total / parseInt(limit))
+      totalPages: Math.ceil(total / parseInt(limit)),
+      reportStats
     });
   } catch (error) {
-    console.error('Get reports error:', error);
-    res.status(500).json({ message: 'Failed to fetch reports' });
+    handleControllerError(error, res, 'fetch reports');
   }
 };
 
@@ -707,29 +747,91 @@ export const getAdminAnalytics = async (req, res) => {
 // @access  Admin only
 export const sendNotification = async (req, res) => {
   try {
-    const { type, title, message, targetUsers, targetRoles } = req.body;
+    const { type, title, message, targetUsers = [], targetRoles = [], channels = ['email'] } = req.body;
     
-    // Mock notification sending
-    // In a real implementation, you would integrate with email/SMS services
+    // Validate input
+    if (!title || !message) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'Title and message are required' 
+      });
+    }
     
-    const notification = {
-      id: Date.now().toString(),
-      type,
-      title,
-      message,
-      targetUsers,
-      targetRoles,
-      sentAt: new Date(),
-      status: 'sent'
+    if (targetUsers.length === 0 && targetRoles.length === 0) {
+      return res.status(400).json({ 
+        success: false,
+        message: 'At least one target user or role must be specified' 
+      });
+    }
+    
+    // Find users to notify
+    const query = {
+      $or: []
     };
     
+    if (targetUsers.length > 0) {
+      query.$or.push({ _id: { $in: targetUsers } });
+    }
+    
+    if (targetRoles.length > 0) {
+      query.$or.push({ role: { $in: targetRoles } });
+    }
+    
+    const usersToNotify = await User.find(query)
+      .select('name email phone role');
+    
+    if (usersToNotify.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: 'No users found matching the specified criteria'
+      });
+    }
+    
+    // Send notifications through selected channels
+    const notificationPromises = [];
+    
+    for (const user of usersToNotify) {
+      // Send email notifications
+      if (channels.includes('email') && user.email) {
+        notificationPromises.push(
+          sendEmail({
+            to: user.email,
+            subject: title,
+            text: message,
+            html: `<p>Hello ${user.name},</p><p>${message}</p>`
+          })
+        );
+      }
+      
+      // Send SMS notifications
+      if (channels.includes('sms') && user.phone) {
+        notificationPromises.push(
+          sendSMS({
+            to: user.phone,
+            message: `${title}: ${message}`
+          })
+        );
+      }
+    }
+    
+    // Wait for all notifications to be sent
+    const results = await Promise.allSettled(notificationPromises);
+    
+    // Count successful and failed notifications
+    const successful = results.filter(r => r.status === 'fulfilled').length;
+    const failed = results.filter(r => r.status === 'rejected').length;
+    
     res.json({
-      message: 'Notification sent successfully',
-      notification
+      success: true,
+      message: `Notifications sent to ${usersToNotify.length} users`,
+      stats: {
+        total: usersToNotify.length,
+        successful,
+        failed
+      }
     });
   } catch (error) {
-    console.error('Send notification error:', error);
-    res.status(500).json({ message: 'Failed to send notification' });
+    handleControllerError(error, res, 'send notifications');
   }
 };
 
@@ -829,51 +931,93 @@ export const getAdminLogs = async (req, res) => {
 // @route   GET /api/admin/export/:type
 // @access  Admin only
 export const exportData = async (req, res) => {
-  try {
+try {
     const { type } = req.params;
     const { format = 'json' } = req.query;
     
-    let data;
+    let query;
+    let fields;
     
+    // Set up query and fields based on export type
     switch (type) {
       case 'users':
-        data = await User.find().select('-password');
+        query = User.find().select('-password');
+        fields = ['_id', 'name', 'email', 'role', 'isActive', 'createdAt'];
         break;
       case 'laborers':
-        data = await User.find({ role: 'laborer' }).select('-password');
+        query = User.find({ role: 'laborer' }).select('-password');
+        fields = ['_id', 'name', 'email', 'specialization', 'rating', 'isVerified', 'createdAt'];
         break;
       case 'jobs':
-        data = await Job.find();
+        query = Job.find();
+        fields = ['_id', 'title', 'description', 'budget', 'location', 'status', 'createdAt'];
         break;
       case 'applications':
-        data = await JobApplication.find()
-          .populate('job laborer client');
+        query = JobApplication.find()
+          .populate('job', 'title')
+          .populate('laborer', 'name')
+          .populate('client', 'name');
+        fields = ['_id', 'job.title', 'laborer.name', 'client.name', 'status', 'createdAt'];
         break;
       case 'reviews':
-        data = await Review.find()
-          .populate('laborer client job');
+        query = Review.find()
+          .populate('laborer', 'name')
+          .populate('client', 'name')
+          .populate('job', 'title');
+        fields = ['_id', 'laborer.name', 'client.name', 'job.title', 'rating', 'comment', 'createdAt'];
         break;
       default:
         return res.status(400).json({ message: 'Invalid export type' });
     }
     
     if (format === 'csv') {
-      // Convert to CSV format
-      const csvData = convertToCSV(data);
+      // Set up CSV response headers
       res.setHeader('Content-Type', 'text/csv');
       res.setHeader('Content-Disposition', `attachment; filename=${type}-${Date.now()}.csv`);
-      res.send(csvData);
+      
+      // Create CSV parser
+      const json2csv = new Parser({ fields });
+      
+      // Create a readable stream from the cursor
+      const dataStream = Readable.from(query.cursor().map(doc => {
+        // Flatten nested objects for CSV
+        const flattenedDoc = {};
+        fields.forEach(field => {
+          if (field.includes('.')) {
+            const [parent, child] = field.split('.');
+            flattenedDoc[field] = doc[parent] ? doc[parent][child] : null;
+          } else {
+            flattenedDoc[field] = doc[field];
+          }
+        });
+        return flattenedDoc;
+      }));
+      
+      // Stream the data through the CSV parser and to the response
+      dataStream.pipe(json2csv).pipe(res);
     } else {
+      // For JSON format, use pagination to avoid memory issues
+      const { page = 1, limit = 100 } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+      
+      const data = await query
+        .skip(skip)
+        .limit(parseInt(limit));
+      
+      const total = await query.model.countDocuments(query.getFilter());
+      
       res.json({
         message: `${type} data exported successfully`,
         data,
         count: data.length,
+        total,
+        page: parseInt(page),
+        totalPages: Math.ceil(total / parseInt(limit)),
         exportedAt: new Date()
       });
     }
   } catch (error) {
-    console.error('Export data error:', error);
-    res.status(500).json({ message: 'Failed to export data' });
+    handleControllerError(error, res, 'export data');
   }
 };
 

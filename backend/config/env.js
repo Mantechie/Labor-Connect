@@ -15,6 +15,9 @@ const config = {
   // JWT Configuration
   JWT_SECRET: process.env.JWT_SECRET || 'labor-connect-default-secret-key-change-in-production',
   JWT_EXPIRE: process.env.JWT_EXPIRE || '7d',
+
+  JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || 'labor-connect-access-secret-key-change-in-production',
+  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'labor-connect-refresh-secret-key-change-in-production',
   
   // Email Configuration
   EMAIL_HOST: process.env.EMAIL_HOST || 'smtp.gmail.com',

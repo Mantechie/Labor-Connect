@@ -4,6 +4,15 @@ import User from '../models/User.js' // User model
 import OTP from '../models/OTP.js' // OTP model
 import generateOTP from '../utils/generateOTP.js' // Generate OTP
 import sendEmail from '../utils/sendEmail.js' // Or use sendSMS
+import { 
+  generateAccessToken, 
+  generateRefreshToken, 
+  verifyRefreshToken 
+} from '../utils/tokenUtils.js' // Token utilities
+import AppError from '../utils/AppError.js' // Custom error class
+import { blacklistToken } from '../utils/tokenBlacklist.js';
+import { authLogger } from '../utils/Logger.js';
+import { validatePasswordStrength } from '../utils/passwordPolicy.js';
 
 import dotenv from 'dotenv' //Loads env variables (JWT_SECRET)
  
@@ -19,53 +28,77 @@ const generateToken = (id, role) => {
   })
 }
 
-// Generate refresh token
-const generateRefreshToken = (id) => {
-  return jwt.sign({ id }, process.env.JWT_SECRET, {
-    expiresIn: '60d', // Refresh token lasts 60 days
-  })
-}
 
-// @desc    Register new user/laborer
-// @route   POST /api/auth/register
-export const register = async (req, res) => {
+
+export const register = async (req, res, next) => {
   try {
-    const { name, email, password, role, phone } = req.body //Destructure request body
+    const { name, email, password, role, phone } = req.body;
+    const ip = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
 
     // Check if user already exists
-    // Prevents duplicate emails
-    const existingUser = await User.findOne({ email })
+    const existingUser = await User.findOne({ email });
     if (existingUser) {
-      return res.status(400).json({ message: 'User already exists' })
+      // Log failed registration attempt
+      authLogger.register(null, email, false, ip, userAgent, {
+        reason: 'Email already exists'
+      });
+      
+      return res.status(400).json({ message: 'User already exists' });
     }
 
-    // Hash password
-    //  Uses bcrypt for secure storage
-    const salt = await bcrypt.genSalt(10) // Generate salt
-    const hashedPassword = await bcrypt.hash(password, salt) //Hash password + salt
+    // Validate password strength
+    const passwordValidation = validatePasswordStrength(password);
+    if (!passwordValidation.success) {
+      // Log failed registration attempt
+      authLogger.register(null, email, false, ip, userAgent, {
+        reason: 'Weak password',
+        details: passwordValidation.message
+      });
+      
+      return res.status(400).json({ message: passwordValidation.message });
+    }
 
-    // Create user
-    // Saves hashed password and role
+    // Hash password with higher cost factor for production
+    const salt = await bcrypt.genSalt(process.env.NODE_ENV === 'production' ? 12 : 10);
+    const hashedPassword = await bcrypt.hash(password, salt);
+
+    // Get client info for token metadata
+    const deviceId = req.headers['x-device-id'] || 'unknown';
+
+    // Create user with refresh token in one operation
     const newUser = new User({
       name,
       email,
-      password: hashedPassword, // Store hashed password (never plaintext!)
-      role, // 'user' or 'laborer' or 'admin'
-      phone: phone || '', // Include phone if provided
-    })
+      password: hashedPassword,
+      role: role || 'user',
+      phone: phone || '',
+      lastLogin: new Date(),
+      loginCount: 1,
+      activityLogs: [{
+        action: 'register',
+        details: 'User registered',
+        ipAddress: ip,
+        userAgent: userAgent
+      }]
+    });
 
-    await newUser.save()  // Save to database
-    
-    // Generate tokens
-    const token = generateToken(newUser._id, newUser.role);
-    const refreshToken = generateRefreshToken(newUser._id);
+    // Generate tokens with metadata
+    const token = generateAccessToken(newUser._id, newUser.role, { ip, userAgent });
+    const refreshToken = generateRefreshToken(newUser._id, { ip, userAgent, deviceId });
     
     // Store refresh token in user document
     newUser.refreshToken = refreshToken;
+    
+    // Save user with all data in one operation
     await newUser.save();
     
-    // Respond with user data + tokens
-    //  Excludes password for security
+    // Log successful registration
+    authLogger.register(newUser._id, email, true, ip, userAgent, {
+      role: newUser.role
+    });
+    
+    // Respond with user data + tokens (exclude sensitive data)
     res.status(201).json({
       message: 'Registration successful',
       user: {
@@ -77,11 +110,23 @@ export const register = async (req, res) => {
         token: token,
         refreshToken: refreshToken,
       },
-    })
+    });
   } catch (err) {
-    res.status(500).json({ message: err.message })
+    console.error('Registration error:', err.message);
+    
+    // Log error
+    authLogger.register(null, req.body.email, false, 
+      req.ip || req.connection.remoteAddress, 
+      req.headers['user-agent'], {
+        error: err.message
+      }
+    );
+    
+    res.status(500).json({ 
+      message: 'Registration failed. Please try again.' 
+    });
   }
-}
+};
 
 // @desc    Login user/laborer/admin
 // @route   POST /api/auth/login
@@ -92,23 +137,40 @@ export const login = async (req, res) => {
     // find user by email
     const user = await User.findOne({ email })
     if (!user) {
-      return res.status(400).json({ message: 'Invalid email or password' })
+      return res.status(401).json({ message: 'Invalid email or password' })
     }
 
     // Compare passwords
     // Uses bcrypt.compare to match hashed passwords
     const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) {
-      return res.status(400).json({ message: 'Invalid email or password' })
+      return res.status(401).json({ message: 'Invalid email or password' })
     }
     
+    // Get client info for token metadata
+    const ip = req.ip || req.connection.remoteAddress
+    const userAgent = req.headers['user-agent']
+    const deviceId = req.headers['x-device-id'] || 'unknown'
+
     // Generate tokens
-    const token = generateToken(user._id, user.role);
-    const refreshToken = generateRefreshToken(user._id);
+    const token = generateToken(user._id, user.role, { ip, userAgent });
+    const refreshToken = generateRefreshToken(user._id, { ip, userAgent, deviceId });
     
     // Store refresh token in user document
     user.refreshToken = refreshToken;
+     user.lastLogin = new Date()
+    user.loginCount += 1
+    user.activityLogs.push({
+      action: 'login',
+      details: 'User logged in',
+      ipAddress: ip,
+      userAgent: userAgent
+    })
+
     await user.save();
+
+    // Log successful login
+    console.log(`✅ User logged in: ${email} (${user._id})`)
     
     // Respond with user data + tokens
     // Return token immediately after login
@@ -126,6 +188,9 @@ export const login = async (req, res) => {
     })
   } catch (err) {
     res.status(500).json({ message: err.message })
+    res.status(500).json({ 
+      message: 'Login failed. Please try again.' 
+    })
   }
 }
 
@@ -134,17 +199,23 @@ export const login = async (req, res) => {
 export const sendOtp = async (req, res) => {
   try {
     const { email, phone } = req.body
-
+    
     if (!email && !phone) {
       return res.status(400).json({ message: 'Email or phone number is required' })
     }
-
+    
     // Check if user exists
     let user;
     if (email) {
       user = await User.findOne({ email })
     } else if (phone) {
       user = await User.findOne({ phone })
+    }
+
+    // Check if account is active
+    if (!user.isActive || user.status !== 'active') {
+      // Use generic error message to prevent user enumeration
+      return res.status(404).json({ message: 'If this account exists, an OTP has been sent.' })
     }
 
     if (!user) {
@@ -202,7 +273,7 @@ export const sendOtp = async (req, res) => {
         };
         
         // Add preview URL for development
-        if (emailResult && emailResult.previewUrl) {
+        if (process.env.NODE_ENV === 'development' && emailResult && emailResult.previewUrl) {
           responseData.previewUrl = emailResult.previewUrl;
           // Email sent successfully
         }
@@ -285,10 +356,32 @@ export const verifyOtp = async (req, res) => {
     } else if (phone) {
       await OTP.deleteMany({ phone })
     }
+    
+    // Get client info for token metadata
+    const ip = req.ip || req.connection.remoteAddress
+    const userAgent = req.headers['user-agent']
+    const deviceId = req.headers['x-device-id'] || 'unknown'
 
     // Generate JWT token and return user data
-    const token = generateToken(user._id, user.role)
+    const token = generateToken(user._id, user.role, { ip, userAgent })
+    const refreshToken = generateRefreshToken(user._id, { ip, userAgent, deviceId })
+    
+    // Update user login information
+    user.refreshToken = refreshToken
+    user.lastLogin = new Date()
+    user.loginCount += 1
+    user.activityLogs.push({
+      action: 'otp_login',
+      details: `User logged in via OTP (${email ? 'email' : 'phone'})`,
+      ipAddress: ip,
+      userAgent: userAgent
+    })
 
+    await user.save()
+
+     // Log successful OTP verification
+    console.log(`✅ User logged in via OTP: ${email || phone} (${user._id})`)
+    
     res.status(200).json({
       message: 'OTP verified successfully',
       user: {
@@ -310,28 +403,47 @@ export const verifyOtp = async (req, res) => {
 // @route   POST /api/auth/refresh
 export const refreshToken = async (req, res) => {
   try {
-    const { refreshToken } = req.body;
+    const { refreshToken: requestToken} = req.body;
     
-    if (!refreshToken) {
+    if (!requestToken) {
       return res.status(400).json({ message: 'Refresh token is required' });
     }
     
     // Verify refresh token
-    const decoded = jwt.verify(refreshToken, process.env.JWT_SECRET);
+    const decoded = jwt.verify(requestToken, process.env.JWT_SECRET);
     
     // Find user with this refresh token
     const user = await User.findById(decoded.id);
-    if (!user || user.refreshToken !== refreshToken) {
+    if (!user || user.refreshToken !== requestToken) {
       return res.status(401).json({ message: 'Invalid refresh token' });
     }
+      
+    // Check if account is active
+    if (!user.isActive || user.status !== 'active') {
+      return res.status(403).json({ message: 'Account is inactive or suspended' });
+    }
+      
+    // Get client info for token metadata
+    const ip = req.ip || req.connection.remoteAddress
+    const userAgent = req.headers['user-agent']
+    const deviceId = req.headers['x-device-id'] || decoded.metadata?.deviceId || 'unknown'
     
     // Generate new tokens
-    const newToken = generateToken(user._id, user.role);
-    const newRefreshToken = generateRefreshToken(user._id);
+    const newToken = generateToken(user._id, user.role, { ip, userAgent });
+    const newRefreshToken = generateRefreshToken(user._id, { ip, userAgent, deviceId });
     
     // Update refresh token in database
     user.refreshToken = newRefreshToken;
+    user.activityLogs.push({
+        action: 'token_refresh',
+        details: 'User refreshed authentication token',
+        ipAddress: ip,
+        userAgent: userAgent
+    });
     await user.save();
+
+    // Log token refresh
+    console.log(`✅ Token refreshed for user: ${user.email} (${user._id})`)
     
     res.json({
       token: newToken,
@@ -349,11 +461,8 @@ export const refreshToken = async (req, res) => {
     if (error.name === 'JsonWebTokenError') {
       return res.status(401).json({ message: 'Invalid refresh token' });
     }
-    if (error.name === 'TokenExpiredError') {
-      return res.status(401).json({ message: 'Refresh token expired' });
-    }
-    res.status(500).json({ message: 'Server error' });
-  }
+    res.status(500).json({ message: 'Failed to refresh token. Please login again.' });
+  } 
 };
 
 // @desc    Logout user (invalidate refresh token)
@@ -361,14 +470,38 @@ export const refreshToken = async (req, res) => {
 export const logout = async (req, res) => {
   try {
     const userId = req.user.id;
+
+    // Get client info for logging
+    const ip = req.ip || req.connection.remoteAddress
+    const userAgent = req.headers['user-agent']
     
-    // Clear refresh token from user document
-    await User.findByIdAndUpdate(userId, { refreshToken: null });
     
+    /// Find user and update
+    const user = await User.findById(userId);
+    if (user && user.refreshToken) {
+      // Add to token blacklist if implementing that feature
+      await blacklistToken(user.refreshToken, userId, {
+        type: 'refresh',
+        reason: 'logout'
+      });
+      
+      // Clear refresh token from user document
+      user.refreshToken = null;
+      user.activityLogs.push({
+        action: 'logout',
+        details: 'User logged out',
+        ipAddress: ip,
+        userAgent: userAgent
+      });
+      
+      await user.save();
+      // Log logout
+      console.log(`✅ User logged out: ${user.email} (${user._id})`)
+    }  
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('Logout error:', error);
-    res.status(500).json({ message: 'Server error' });
+    res.status(500).json({ message: 'Logout failed. Please try again.' });
   }
 };
 
@@ -377,7 +510,7 @@ export const logout = async (req, res) => {
 // @access  Private
 export const getCurrentUser = async (req, res) => {
   try {
-    const user = await User.findById(req.user.id).select('-password');
+    const user = await User.findById(req.user.id).select('-password -refreshToken');
     if (!user) {
       return res.status(404).json({ message: 'User not found' });
     }
@@ -391,10 +524,12 @@ export const getCurrentUser = async (req, res) => {
         phone: user.phone,
         address: user.address,
         profilePhoto: user.profilePhoto,
-        createdAt: user.createdAt
+        createdAt: user.createdAt,
+        lastLogin: user.lastLogin
       }
     });
   } catch (error) {
-    res.status(500).json({ message: error.message });
+    console.error('Get current user error:', error);
+    res.status(500).json({ message: 'Failed to retrieve user information' });
   }
 };
