@@ -44,11 +44,21 @@ export default defineConfig({
   },
   build: {
     sourcemap: true, // Enable source maps for debugging
+    chunkSizeWarningLimit: 1000, // Increase warning limit to 1MB
     rollupOptions: {
       output: {
         manualChunks: {
-          vendor: ['react', 'react-dom'],
-          bootstrap: ['react-bootstrap', 'bootstrap']
+          // Core React libraries
+          react: ['react', 'react-dom'],
+          // UI Framework
+          bootstrap: ['react-bootstrap', 'bootstrap'],
+          // Routing
+          router: ['react-router-dom'],
+          // Charts and icons
+          charts: ['recharts'],
+          icons: ['react-icons'],
+          // HTTP client
+          http: ['axios']
         }
       }
     }
