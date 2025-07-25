@@ -1,6 +1,8 @@
+/* eslint-disable no-undef */
 import React, { useState, useEffect } from 'react';
 import { Alert, Button, Badge, Collapse, Card } from 'react-bootstrap';
-import { CorsTestUtil } from '../utils/corsTest';
+// eslint-disable-next-line no-unused-vars
+import { testCorsConnection } from '../utils/corsTest';
 
 const CorsStatus = () => {
   const [corsStatus, setCorsStatus] = useState(null);
