@@ -36,6 +36,26 @@ export const otpLimiter = rateLimit({
   }
 });
 
+// Job creation rate limiter
+export const createJobLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000, // 1 hour
+  max: 5, // limit each user to 5 job posts per hour
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // Use authenticated user ID
+    if (req.user && req.user.id) {
+      return `user_\${req.user.id}`;
+    }
+    // Fallback to IP address
+    return ipKeyGenerator(req);
+  },
+  message: {
+    status: 'error',
+    message: 'Too many job post attempts, please try again after an hour'
+  }
+});
+
 // Chat rate limiter
 export const chatLimiter = rateLimit({
   windowMs: 1 * 60 * 1000, // 1 minute

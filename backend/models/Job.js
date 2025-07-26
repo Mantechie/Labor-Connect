@@ -56,5 +56,14 @@ const jobSchema = new mongoose.Schema(
   }
 )
 
+// Create indexes for frequently queried fields
+jobSchema.index({ category: 1 });
+jobSchema.index({ location: 'text' });
+jobSchema.index({ budget: 1 });
+jobSchema.index({ status: 1 });
+jobSchema.index({ createdAt: -1 });
+jobSchema.index({ title: 'text', description: 'text' });
+jobSchema.index({ postedBy: 1 });
+
 const Job = mongoose.model('Job', jobSchema)
 export default Job

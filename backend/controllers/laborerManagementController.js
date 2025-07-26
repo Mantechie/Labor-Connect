@@ -3,279 +3,256 @@ import User from '../models/User.js';
 import Laborer from '../models/Laborer.js';
 import Admin from '../models/Admin.js';
 import AdminLog from '../models/AdminLog.js';
-import sendEmail from '../utils/sendEmail.js';
-import sendSMS from '../utils/sendSMS.js';
+import asyncHandler from 'express-async-handler';
+import { logger } from '../utils/Logger.js';
+import { successResponse, errorResponse } from '../utils/responseUtils.js';
+import { LABORER_STATUSES, SORT_ORDERS, SEVERITY_LEVELS, ADMIN_ACTIONS, LOG_STATUS } from '../constants/index.js';
+import * as laborerService from '../services/laborerService.js';
+import { notifyAdmins } from '../services/notificationService.js';
 
-// Helper function to notify admins
-const notifyAdmins = async ({ subject, message, excludeAdminId }) => {
+// @desc    Add new laborer
+// @route   POST /api/admin/laborers
+// @access  Admin only
+export const addLaborer = asyncHandler(async (req, res) => {
+  const { name, email, phone, specialization, status } = req.body;
+
   try {
-    const admins = await Admin.find({ 
-      isActive: true, 
-      _id: { $ne: excludeAdminId } 
+    // Check if laborer already exists
+    const existingLaborer = await Laborer.findOne({ email });
+    if (existingLaborer) {
+      return errorResponse(res, 'Laborer with this email already exists', 409);
+    }
+
+    // Create new laborer
+    const laborer = await laborerService.createLaborer({
+      name,
+      email,
+      phone,
+      specialization,
+      status: status || LABORER_STATUSES.ACTIVE
     });
-    
-    if (admins.length === 0) {
-      // No other admins to notify
-      return;
-    }
-    
-    for (const admin of admins) {
-      try {
-        if (admin.email) {
-          await sendEmail({
-            to: admin.email,
-            subject,
-            html: `
-              <h2>🔔 Admin Notification</h2>
-              <p>${message}</p>
-              <p><strong>Subject:</strong> ${subject}</p>
-              <p><strong>Time:</strong> ${new Date().toLocaleString()}</p>
-            `
-          });
-        }
-        
-        if (admin.phone) {
-          await sendSMS({
-            to: admin.phone,
-            message: `LabourConnect Admin: ${subject} - ${message}`
-          });
-        }
-      } catch (error) {
-        console.error(`Error notifying admin ${admin.email}:`, error);
+
+    // Log the action
+    await AdminLog.createLog({
+      adminId: req.admin.id,
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Added new laborer - ${email}`,
+      severity: SEVERITY_LEVELS.MEDIUM,
+      status: LOG_STATUS.SUCCESS,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      correlationId: req.correlationId
+    });
+
+    return successResponse(res, {
+      message: 'Laborer added successfully',
+      laborer: {
+        id: laborer._id,
+        email: laborer.email,
+        name: laborer.name,
+        status: laborer.status,
+        specialization: laborer.specialization
       }
-    }
-    
-    // Notified admins successfully
+    });
   } catch (error) {
-    console.error('Error in notifyAdmins:', error);
+    logger.error(`Error adding laborer: ${error.message}`, { error, correlationId: req.correlationId });
+    
+    // Log the failed action
+    await AdminLog.createLog({
+      adminId: req.admin.id,
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Failed to add laborer - ${email}`,
+      severity: SEVERITY_LEVELS.HIGH,
+      status: LOG_STATUS.FAILED,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      metadata: { error: error.message },
+      correlationId: req.correlationId
+    });
+
+    return errorResponse(res, 'Failed to add laborer', 500);
   }
-};
+});
 
 // @desc    Get all laborers with pagination and filters
 // @route   GET /api/admin/laborers
 // @access  Admin only
-export const getAllLaborers = async (req, res) => {
-  try {
-    const { page = 1, limit = 10, search = '', status = '', specialization = '', verified = '', sortBy = 'createdAt', sortOrder = 'desc' } = req.query;
-    
-    // Build filter object
-    const filter = {};
-    
-    if (search) {
-      filter.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { email: { $regex: search, $options: 'i' } },
-        { phone: { $regex: search, $options: 'i' } },
-        { specialization: { $regex: search, $options: 'i' } }
-      ];
-    }
-    
-    if (status) {
-      filter.status = status;
-    }
-
-    if (specialization) {
-      filter.specialization = specialization;
-    }
-
-    if (verified !== '') {
-      filter.isVerified = verified === 'true';
-    }
-
-    // Build sort object
-    const sort = {};
-    sort[sortBy] = sortOrder === 'desc' ? -1 : 1;
-
-    // Calculate pagination
-    const skip = (page - 1) * limit;
-    
-    // Get laborers with pagination
-    const laborers = await Laborer.find(filter)
-      .select('-password')
-      .sort(sort)
-      .skip(skip)
-      .limit(parseInt(limit))
-      .lean();
-
-    // Get total count for pagination
-    const totalLaborers = await Laborer.countDocuments(filter);
-    const totalPages = Math.ceil(totalLaborers / limit);
-
-    // Get laborer statistics
-    const stats = await Laborer.aggregate([
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          active: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
-          inactive: { $sum: { $cond: [{ $eq: ['$status', 'inactive'] }, 1, 0] } },
-          suspended: { $sum: { $cond: [{ $eq: ['$status', 'suspended'] }, 1, 0] } },
-          verified: { $sum: { $cond: ['$isVerified', 1, 0] } },
-          unverified: { $sum: { $cond: ['$isVerified', 0, 1] } },
-          available: { $sum: { $cond: ['$isAvailable', 1, 0] } },
-          unavailable: { $sum: { $cond: ['$isAvailable', 0, 1] } }
-        }
-      }
-    ]);
-
-    // Get specialization statistics
-    const specializationStats = await Laborer.aggregate([
-      {
-        $group: {
-          _id: '$specialization',
-          count: { $sum: 1 }
-        }
-      },
-      {
-        $sort: { count: -1 }
-      },
-      {
-        $limit: 10
-      }
-    ]);
-
-    // Log the action
-    await AdminLog.createLog({
-      adminId: req.admin.id,
-      action: 'LABORER_MANAGEMENT',
-      details: `Viewed laborer list - Page ${page}, Search: ${search}, Status: ${status}`,
-      severity: 'LOW',
-      status: 'SUCCESS',
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent')
-    });
-
-    // Set cache control headers to prevent 304 responses for admin data
-    res.set({
-      'Cache-Control': 'no-cache, no-store, must-revalidate',
-      'Pragma': 'no-cache',
-      'Expires': '0',
-      'ETag': false
-    });
-
-    res.status(200).json({
-      laborers,
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages,
-        totalLaborers,
-        hasNextPage: page < totalPages,
-        hasPrevPage: page > 1
-      },
-      stats: stats[0] || {
-        total: 0,
-        active: 0,
-        inactive: 0,
-        suspended: 0,
-        verified: 0,
-        unverified: 0,
-        available: 0,
-        unavailable: 0
-      },
-      specializationStats,
-      timestamp: new Date().toISOString() // Add timestamp to ensure uniqueness
-    });
-  } catch (error) {
-    console.error('Error getting laborers:', error);
-    res.status(500).json({ message: 'Failed to get laborers' });
+export const getAllLaborers = asyncHandler(async (req, res) => {
+  const { 
+    page = 1, 
+    limit = 10, 
+    search = '', 
+    status = '', 
+    specialization = '', 
+    verified = '', 
+    sortBy = 'createdAt', 
+    sortOrder = SORT_ORDERS.DESC 
+  } = req.query;
+  
+  // Build filter object
+  const filter = { isDeleted: { $ne: true } };
+  
+  if (search) {
+    filter.$or = [
+      { name: { $regex: search, $options: 'i' } },
+      { email: { $regex: search, $options: 'i' } },
+      { phone: { $regex: search, $options: 'i' } },
+      { specialization: { $regex: search, $options: 'i' } }
+    ];
   }
-};
+  
+  if (status) {
+    filter.status = status;
+  }
+
+  if (specialization) {
+    filter.specialization = specialization;
+  }
+
+  if (verified !== '') {
+    filter.isVerified = verified === 'true';
+  }
+
+  // Build sort object
+  const sort = {};
+  sort[sortBy] = sortOrder === SORT_ORDERS.DESC ? -1 : 1;
+
+  // Calculate pagination
+  const skip = (page - 1) * limit;
+  
+  // Get laborers with pagination
+  const laborers = await laborerService.getLaborers(filter, sort, skip, parseInt(limit));
+
+  // Get total count for pagination
+  const totalLaborers = await laborerService.getLaborerCount(filter);
+  const totalPages = Math.ceil(totalLaborers / limit);
+
+  // Get laborer statistics
+  const stats = await laborerService.getLaborerStats();
+
+  // Get specialization statistics
+  const specializationStats = await laborerService.getSpecializationStats();
+
+  // Log the action
+  await AdminLog.createLog({
+    adminId: req.admin.id,
+    action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+    details: `Viewed laborer list - Page ${page}, Search: ${search}, Status: ${status}`,
+    severity: SEVERITY_LEVELS.LOW,
+    status: LOG_STATUS.SUCCESS,
+    ipAddress: req.ip,
+    userAgent: req.get('User-Agent'),
+    correlationId: req.correlationId
+  });
+
+  // Set cache control headers to prevent 304 responses for admin data
+  res.set({
+    'Cache-Control': 'no-cache, no-store, must-revalidate',
+    'Pragma': 'no-cache',
+    'Expires': '0',
+    'ETag': false
+  });
+
+  return successResponse(res, {
+    laborers,
+    pagination: {
+      currentPage: parseInt(page),
+      totalPages,
+      totalLaborers,
+      hasNextPage: page < totalPages,
+      hasPrevPage: page > 1
+    },
+    stats: stats[0] || {
+      total: 0,
+      active: 0,
+      inactive: 0,
+      suspended: 0,
+      verified: 0,
+      unverified: 0,
+      available: 0,
+      unavailable: 0
+    },
+    specializationStats,
+    timestamp: new Date().toISOString() // Add timestamp to ensure uniqueness
+  });
+});
 
 // @desc    Get single laborer details
 // @route   GET /api/admin/laborers/:id
 // @access  Admin only
-export const getLaborerDetails = async (req, res) => {
-  try {
-    const { id } = req.params;
-    
-    const laborer = await Laborer.findById(id)
-      .select('-password')
-      .lean();
+export const getLaborerDetails = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
+  const laborer = await laborerService.getLaborerById(id);
 
-    if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
-    }
-
-    // Get laborer activity (recent jobs, reviews, etc.)
-    // This would be expanded based on your actual models
-    const laborerActivity = {
-      totalJobsCompleted: 0, // Would come from Job model
-      totalReviews: 0,       // Would come from Review model
-      averageRating: laborer.rating || 0,
-      lastLogin: laborer.lastLogin,
-      accountCreated: laborer.createdAt,
-      totalEarnings: 0 // Would come from payment/transaction model
-    };
-
-    // Log the action
-    await AdminLog.createLog({
-      adminId: req.admin.id,
-      action: 'LABORER_MANAGEMENT',
-      details: `Viewed laborer details - ${laborer.email}`,
-      severity: 'LOW',
-      status: 'SUCCESS',
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent')
-    });
-
-    res.status(200).json({
-      laborer: { ...laborer, activity: laborerActivity }
-    });
-  } catch (error) {
-    console.error('Error getting laborer details:', error);
-    res.status(500).json({ message: 'Failed to get laborer details' });
+  if (!laborer) {
+    return errorResponse(res, 'Laborer not found', 404);
   }
-};
+
+  // Get laborer activity (recent jobs, reviews, etc.)
+  // This would be expanded based on your actual models
+  const laborerActivity = {
+    totalJobsCompleted: 0, // Would come from Job model
+    totalReviews: 0,       // Would come from Review model
+    averageRating: laborer.rating || 0,
+    lastLogin: laborer.lastLogin,
+    accountCreated: laborer.createdAt,
+    totalEarnings: 0 // Would come from payment/transaction model
+  };
+
+  // Log the action
+  await AdminLog.createLog({
+    adminId: req.admin.id,
+    action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+    details: `Viewed laborer details - ${laborer.email}`,
+    severity: SEVERITY_LEVELS.LOW,
+    status: LOG_STATUS.SUCCESS,
+    ipAddress: req.ip,
+    userAgent: req.get('User-Agent'),
+    correlationId: req.correlationId
+  });
+
+  return successResponse(res, {
+    laborer: { ...laborer, activity: laborerActivity }
+  });
+});
 
 // @desc    Update laborer status
 // @route   PUT /api/admin/laborers/:id/status
 // @access  Admin only
-export const updateLaborerStatus = async (req, res) => {
+export const updateLaborerStatus = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { status, reason } = req.body;
+  
+  if (!Object.values(LABORER_STATUSES).includes(status)) {
+    return errorResponse(res, 'Invalid status', 400);
+  }
+
   try {
-    const { id } = req.params;
-    const { status, reason } = req.body;
-    
-    const validStatuses = ['active', 'inactive', 'suspended'];
-    
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: 'Invalid status' });
-    }
-
-    const laborer = await Laborer.findById(id);
-    
-    if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
-    }
-
-    const oldStatus = laborer.status;
-    laborer.status = status;
-    
-    if (reason) {
-      laborer.statusReason = reason;
-    }
-    
-    await laborer.save();
+    const { laborer, oldStatus } = await laborerService.updateLaborerStatus(id, status, reason);
 
     // Notify other admins
-    await notifyAdmins({
+    await notificationQueue.add('admin-notification', {
       subject: 'Laborer Status Updated',
       message: `Admin ${req.admin.name} updated laborer ${laborer.email} status from ${oldStatus} to ${status}. Reason: ${reason || 'No reason provided'}`,
-      excludeAdminId: req.admin.id
+      excludeAdminId: req.admin.id,
+      correlationId: req.correlationId
     });
 
     // Log the action
     await AdminLog.createLog({
       adminId: req.admin.id,
-      action: 'LABORER_MANAGEMENT',
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
       details: `Updated laborer status - ${laborer.email}: ${oldStatus} → ${status}`,
-      severity: 'MEDIUM',
-      status: 'SUCCESS',
+      severity: SEVERITY_LEVELS.MEDIUM,
+      status: LOG_STATUS.SUCCESS,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      metadata: { oldStatus, newStatus: status, reason }
+      metadata: { oldStatus, newStatus: status, reason },
+      correlationId: req.correlationId
     });
 
-    res.status(200).json({
+    return successResponse(res, {
       message: 'Laborer status updated successfully',
       laborer: {
         id: laborer._id,
@@ -286,54 +263,51 @@ export const updateLaborerStatus = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error updating laborer status:', error);
-    res.status(500).json({ message: 'Failed to update laborer status' });
+    logger.error({
+      message: 'Error updating laborer status',
+      error: error.message,
+      stack: error.stack,
+      laborerId: id,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    return errorResponse(res, 'Failed to update laborer status', 500);
   }
-};
+});
 
 // @desc    Verify/Unverify laborer
 // @route   PUT /api/admin/laborers/:id/verify
 // @access  Admin only
-export const updateLaborerVerification = async (req, res) => {
+export const updateLaborerVerification = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { isVerified, reason } = req.body;
+  
   try {
-    const { id } = req.params;
-    const { isVerified, reason } = req.body;
-    
-    const laborer = await Laborer.findById(id);
-    
-    if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
-    }
-
-    const oldVerification = laborer.isVerified;
-    laborer.isVerified = isVerified;
-    
-    if (reason) {
-      laborer.verificationReason = reason;
-    }
-    
-    await laborer.save();
+    const { laborer, oldVerification } = await laborerService.updateLaborerVerification(id, isVerified, reason);
 
     // Notify other admins
     await notifyAdmins({
       subject: 'Laborer Verification Updated',
       message: `Admin ${req.admin.name} ${isVerified ? 'verified' : 'unverified'} laborer ${laborer.email}. Reason: ${reason || 'No reason provided'}`,
-      excludeAdminId: req.admin.id
+      excludeAdminId: req.admin.id,
+      correlationId: req.correlationId
     });
 
     // Log the action
     await AdminLog.createLog({
       adminId: req.admin.id,
-      action: 'LABORER_MANAGEMENT',
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
       details: `Updated laborer verification - ${laborer.email}: ${oldVerification} → ${isVerified}`,
-      severity: 'MEDIUM',
-      status: 'SUCCESS',
+      severity: SEVERITY_LEVELS.MEDIUM,
+      status: LOG_STATUS.SUCCESS,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      metadata: { oldVerification, newVerification: isVerified, reason }
+      metadata: { oldVerification, newVerification: isVerified, reason },
+      correlationId: req.correlationId
     });
 
-    res.status(200).json({
+    return successResponse(res, {
       message: `Laborer ${isVerified ? 'verified' : 'unverified'} successfully`,
       laborer: {
         id: laborer._id,
@@ -344,77 +318,72 @@ export const updateLaborerVerification = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error updating laborer verification:', error);
-    res.status(500).json({ message: 'Failed to update laborer verification' });
+    logger.error({
+      message: 'Error updating laborer verification',
+      error: error.message,
+      stack: error.stack,
+      laborerId: id,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    return errorResponse(res, 'Failed to update laborer verification', 500);
   }
-};
+});
 
 // @desc    Delete laborer
 // @route   DELETE /api/admin/laborers/:id
 // @access  Admin only
-export const deleteLaborer = async (req, res) => {
+export const deleteLaborer = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  
   try {
-    const { id } = req.params;
-    
-    const laborer = await Laborer.findById(id);
-    
-    if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
-    }
-
-    // Soft delete - mark as deleted instead of actually removing
-    laborer.isDeleted = true;
-    laborer.deletedAt = new Date();
-    laborer.deletedBy = req.admin.id;
-    await laborer.save();
+    const laborer = await laborerService.softDeleteLaborer(id, req.admin.id);
 
     // Notify other admins
     await notifyAdmins({
       subject: 'Laborer Deleted',
       message: `Admin ${req.admin.name} deleted laborer ${laborer.email}`,
-      excludeAdminId: req.admin.id
+      excludeAdminId: req.admin.id,
+      correlationId: req.correlationId
     });
 
     // Log the action
     await AdminLog.createLog({
       adminId: req.admin.id,
-      action: 'LABORER_MANAGEMENT',
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
       details: `Deleted laborer - ${laborer.email}`,
-      severity: 'HIGH',
-      status: 'SUCCESS',
+      severity: SEVERITY_LEVELS.HIGH,
+      status: LOG_STATUS.SUCCESS,
       ipAddress: req.ip,
-      userAgent: req.get('User-Agent')
+      userAgent: req.get('User-Agent'),
+      correlationId: req.correlationId
     });
 
-    res.status(200).json({
+    return successResponse(res, {
       message: 'Laborer deleted successfully'
     });
   } catch (error) {
-    console.error('Error deleting laborer:', error);
-    res.status(500).json({ message: 'Failed to delete laborer' });
+    logger.error({
+      message: 'Error deleting laborer',
+      error: error.message,
+      stack: error.stack,
+      laborerId: id,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    return errorResponse(res, 'Failed to delete laborer', 500);
   }
-};
+});
 
 // @desc    Get laborer statistics
 // @route   GET /api/admin/laborers/stats
 // @access  Admin only
-export const getLaborerStats = async (req, res) => {
+export const getLaborerStats = asyncHandler(async (req, res) => {
   try {
-    const stats = await Laborer.aggregate([
-      {
-        $group: {
-          _id: null,
-          total: { $sum: 1 },
-          active: { $sum: { $cond: [{ $eq: ['$status', 'active'] }, 1, 0] } },
-          inactive: { $sum: { $cond: [{ $eq: ['$status', 'inactive'] }, 1, 0] } },
-          suspended: { $sum: { $cond: [{ $eq: ['$status', 'suspended'] }, 1, 0] } },
-          verified: { $sum: { $cond: ['$isVerified', 1, 0] } },
-          unverified: { $sum: { $cond: ['$isVerified', 0, 1] } },
-          available: { $sum: { $cond: ['$isAvailable', 1, 0] } },
-          unavailable: { $sum: { $cond: ['$isAvailable', 0, 1] } }
-        }
-      }
-    ]);
+    // Get basic stats
+    const stats = await laborerService.getLaborerStats();
 
     // Get monthly registrations for the last 6 months
     const sixMonthsAgo = new Date();
@@ -423,7 +392,8 @@ export const getLaborerStats = async (req, res) => {
     const monthlyStats = await Laborer.aggregate([
       {
         $match: {
-          createdAt: { $gte: sixMonthsAgo }
+          createdAt: { $gte: sixMonthsAgo },
+          isDeleted: { $ne: true }
         }
       },
       {
@@ -441,32 +411,22 @@ export const getLaborerStats = async (req, res) => {
     ]);
 
     // Get specialization distribution
-    const specializationStats = await Laborer.aggregate([
-      {
-        $group: {
-          _id: '$specialization',
-          count: { $sum: 1 },
-          avgRating: { $avg: '$rating' }
-        }
-      },
-      {
-        $sort: { count: -1 }
-      }
-    ]);
+    const specializationStats = await laborerService.getSpecializationStats();
 
     // Log the action
     await AdminLog.createLog({
       adminId: req.admin.id,
-      action: 'LABORER_MANAGEMENT',
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
       details: 'Viewed laborer statistics',
-      severity: 'LOW',
-      status: 'SUCCESS',
+      severity: SEVERITY_LEVELS.LOW,
+      status: LOG_STATUS.SUCCESS,
       ipAddress: req.ip,
-      userAgent: req.get('User-Agent')
+      userAgent: req.get('User-Agent'),
+      correlationId: req.correlationId
     });
 
-    res.status(200).json({
-      stats: stats[0] || {
+    return successResponse(res, {
+      overallStats: stats[0] || {
         total: 0,
         active: 0,
         inactive: 0,
@@ -480,739 +440,828 @@ export const getLaborerStats = async (req, res) => {
       specializationStats
     });
   } catch (error) {
-    console.error('Error getting laborer stats:', error);
-    res.status(500).json({ message: 'Failed to get laborer statistics' });
+    logger.error({
+      message: 'Error getting laborer statistics',
+      error: error.message,
+      stack: error.stack,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    return errorResponse(res, 'Failed to get laborer statistics', 500);
   }
-};
+});
 
-// @desc    Bulk update laborer status
+// @desc    Bulk update laborer statuses
 // @route   PUT /api/admin/laborers/bulk-status
 // @access  Admin only
-export const bulkUpdateLaborerStatus = async (req, res) => {
+export const bulkUpdateLaborerStatus = asyncHandler(async (req, res) => {
+  const { laborerIds, status, reason } = req.body;
+
+  if (!Object.values(LABORER_STATUSES).includes(status)) {
+    return errorResponse(res, 'Invalid status', 400);
+  }
+
+  if (!laborerIds || !Array.isArray(laborerIds) || laborerIds.length === 0) {
+    return errorResponse(res, 'Invalid laborer IDs', 400);
+  }
+
   try {
-    const { laborerIds, status, reason } = req.body;
-    
-    if (!laborerIds || !Array.isArray(laborerIds) || laborerIds.length === 0) {
-      return res.status(400).json({ message: 'Laborer IDs array is required' });
-    }
-
-    const validStatuses = ['active', 'inactive', 'suspended'];
-    
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: 'Invalid status' });
-    }
-
-    const updateData = { status };
-    if (reason) {
-      updateData.statusReason = reason;
-    }
-
-    const result = await Laborer.updateMany(
-      { _id: { $in: laborerIds } },
-      updateData
-    );
+    const { updatedCount } = await laborerService.bulkUpdateLaborerStatus(laborerIds, status, reason, req.admin.id);
 
     // Notify other admins
-    await notifyAdmins({
+    await notificationQueue.add('admin-notification', {
       subject: 'Bulk Laborer Status Update',
-      message: `Admin ${req.admin.name} updated status of ${result.modifiedCount} laborers to ${status}. Reason: ${reason || 'No reason provided'}`,
-      excludeAdminId: req.admin.id
+      message: `Admin ${req.admin.name} updated status for ${updatedCount} laborers to ${status}. Reason: ${reason || 'No reason provided'}`,
+      excludeAdminId: req.admin.id,
+      correlationId: req.correlationId
     });
 
     // Log the action
     await AdminLog.createLog({
       adminId: req.admin.id,
-      action: 'LABORER_MANAGEMENT',
-      details: `Bulk updated ${result.modifiedCount} laborers status to ${status}`,
-      severity: 'MEDIUM',
-      status: 'SUCCESS',
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Bulk updated ${updatedCount} laborers to status ${status}`,
+      severity: SEVERITY_LEVELS.HIGH,
+      status: LOG_STATUS.SUCCESS,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      metadata: { laborerIds, status, reason, modifiedCount: result.modifiedCount }
+      metadata: { laborerIds, status, reason },
+      correlationId: req.correlationId
     });
 
-    res.status(200).json({
-      message: `Successfully updated ${result.modifiedCount} laborers`,
-      modifiedCount: result.modifiedCount
+    return successResponse(res, {
+      message: `Successfully updated ${updatedCount} laborers`,
+      updatedCount
     });
   } catch (error) {
-    console.error('Error bulk updating laborers:', error);
-    res.status(500).json({ message: 'Failed to bulk update laborers' });
+    logger.error({
+      message: 'Error in bulk laborer status update',
+      error: error.message,
+      stack: error.stack,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+
+    // Log the failed action
+    await AdminLog.createLog({
+      adminId: req.admin.id,
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: 'Failed bulk laborer status update',
+      severity: SEVERITY_LEVELS.HIGH,
+      status: LOG_STATUS.FAILED,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      metadata: { error: error.message },
+      correlationId: req.correlationId
+    });
+
+    return errorResponse(res, 'Failed to update laborer statuses', 500);
   }
-};
+});
+
+// @desc    Export laborer data
+// @route   GET /api/admin/laborers/export
+// @access  Admin only
+export const exportLaborerData = asyncHandler(async (req, res) => {
+  const { format = 'csv', specialization = '', status = '', verified = '', rating = '' } = req.query;
+
+  // Build filter
+  const filter = { isDeleted: { $ne: true } };
+  
+  if (specialization) {
+    filter.specialization = specialization;
+  }
+  
+  if (status) {
+    filter.status = status;
+  }
+  
+  if (verified !== '') {
+    filter.isVerified = verified === 'true';
+  }
+  
+  if (rating) {
+    filter.rating = { $gte: parseFloat(rating) };
+  }
+
+  try {
+    // Log the export action
+    await AdminLog.createLog({
+      adminId: req.admin.id,
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Exported laborer data - Format: ${format}, Filters: ${JSON.stringify({ specialization, status, verified, rating })}`,
+      severity: SEVERITY_LEVELS.MEDIUM,
+      status: LOG_STATUS.SUCCESS,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      correlationId: req.correlationId
+    });
+
+    if (format === 'csv') {
+      // Define fields to export
+      const fields = [
+        'name',
+        'email',
+        'phone',
+        'specialization',
+        'status',
+        'isVerified',
+        'rating',
+        'isAvailable',
+        'location',
+        'createdAt',
+        'lastLogin'
+      ];
+      
+      // Stream CSV response
+      await laborerService.streamLaborersExport(res, filter, fields, req.correlationId);
+    } else if (format === 'json') {
+      // For JSON format, use pagination to avoid memory issues
+      const page = parseInt(req.query.page) || 1;
+      const limit = parseInt(req.query.limit) || 100;
+      const skip = (page - 1) * limit;
+      
+      const laborers = await Laborer.find(filter)
+        .select('-password -refreshToken')
+        .skip(skip)
+        .limit(limit)
+        .lean();
+      
+      const totalLaborers = await Laborer.countDocuments(filter);
+      const totalPages = Math.ceil(totalLaborers / limit);
+      
+      return successResponse(res, {
+        laborers,
+        pagination: {
+          currentPage: page,
+          totalPages,
+          totalLaborers,
+          hasNextPage: page < totalPages,
+          hasPrevPage: page > 1
+        }
+      });
+    } else {
+      return errorResponse(res, 'Unsupported export format', 400);
+    }
+  } catch (error) {
+    logger.error({
+      message: 'Error exporting laborer data',
+      error: error.message,
+      stack: error.stack,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    // Only send error response if headers haven't been sent yet
+    if (!res.headersSent) {
+      return errorResponse(res, 'Failed to export laborer data', 500);
+    }
+  }
+});
 
 // @desc    Get specializations list
 // @route   GET /api/admin/laborers/specializations
 // @access  Admin only
-export const getSpecializations = async (req, res) => {
+export const getSpecializations = asyncHandler(async (req, res) => {
   try {
-    const specializations = await Laborer.distinct('specialization');
+    const specializations = await Laborer.aggregate([
+      { $match: { isDeleted: { $ne: true } } },
+      { $group: { _id: '$specialization' } },
+      { $sort: { _id: 1 } }
+    ]);
     
-    res.status(200).json({
-      specializations: specializations.filter(s => s) // Remove null/empty values
+    return successResponse(res, {
+      specializations: specializations.map(s => s._id).filter(Boolean)
     });
   } catch (error) {
-    console.error('Error getting specializations:', error);
-    res.status(500).json({ message: 'Failed to get specializations' });
+    logger.error({
+      message: 'Error getting specializations',
+      error: error.message,
+      stack: error.stack,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    return errorResponse(res, 'Failed to get specializations', 500);
   }
-};
+});
 
 // @desc    Get laborer complaints
 // @route   GET /api/admin/laborers/:id/complaints
 // @access  Admin only
-export const getLaborerComplaints = async (req, res) => {
+export const getLaborerComplaints = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { page = 1, limit = 10, status = '' } = req.query;
+  
   try {
-    const { id } = req.params;
-    const { page = 1, limit = 10, severity = '', status = '' } = req.query;
-
-    const laborer = await Laborer.findById(id).populate('complaintsReceived.from', 'name email');
+    // Check if laborer exists
+    const laborer = await Laborer.findById(id).select('name email');
     
     if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+      return errorResponse(res, 'Laborer not found', 404);
     }
-
-    let complaints = laborer.complaintsReceived;
-
-    // Apply filters
-    if (severity) {
-      complaints = complaints.filter(c => c.severity === severity);
-    }
+    
+    // Build filter
+    const filter = { laborerId: id };
+    
     if (status) {
-      complaints = complaints.filter(c => c.status === status);
+      filter.status = status;
     }
-
-    // Sort by creation date (newest first)
-    complaints.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
-
-    // Pagination
-    const skip = (page - 1) * limit;
-    const paginatedComplaints = complaints.slice(skip, skip + parseInt(limit));
-    const totalComplaints = complaints.length;
+    
+    // Import Complaint model dynamically
+    const Complaint = (await import('../models/Complaint.js')).default;
+    
+    // Get complaints with pagination
+    const complaints = await Complaint.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .populate('userId', 'name email')
+      .lean();
+    
+    // Get total count
+    const totalComplaints = await Complaint.countDocuments(filter);
     const totalPages = Math.ceil(totalComplaints / limit);
-
-    // Get complaint statistics
-    const complaintStats = {
-      total: laborer.complaintsReceived.length,
-      pending: laborer.complaintsReceived.filter(c => c.status === 'pending').length,
-      investigating: laborer.complaintsReceived.filter(c => c.status === 'investigating').length,
-      resolved: laborer.complaintsReceived.filter(c => c.status === 'resolved').length,
-      dismissed: laborer.complaintsReceived.filter(c => c.status === 'dismissed').length,
-      critical: laborer.complaintsReceived.filter(c => c.severity === 'critical').length,
-      high: laborer.complaintsReceived.filter(c => c.severity === 'high').length,
-      medium: laborer.complaintsReceived.filter(c => c.severity === 'medium').length,
-      low: laborer.complaintsReceived.filter(c => c.severity === 'low').length
-    };
-
-    res.status(200).json({
-      complaints: paginatedComplaints,
+    
+    // Log the action
+    await AdminLog.createLog({
+      adminId: req.admin.id,
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Viewed complaints for laborer ${laborer.email}`,
+      severity: SEVERITY_LEVELS.LOW,
+      status: LOG_STATUS.SUCCESS,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      correlationId: req.correlationId
+    });
+    
+    return successResponse(res, {
+      laborer: {
+        id: laborer._id,
+        name: laborer.name,
+        email: laborer.email
+      },
+      complaints,
       pagination: {
         currentPage: parseInt(page),
         totalPages,
         totalComplaints,
         hasNextPage: page < totalPages,
         hasPrevPage: page > 1
-      },
-      stats: complaintStats
+      }
     });
   } catch (error) {
-    console.error('Error getting laborer complaints:', error);
-    res.status(500).json({ message: 'Failed to get laborer complaints' });
+    logger.error({
+      message: 'Error getting laborer complaints',
+      error: error.message,
+      stack: error.stack,
+      laborerId: id,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    return errorResponse(res, 'Failed to get laborer complaints', 500);
   }
-};
+});
 
 // @desc    Update complaint status
 // @route   PUT /api/admin/laborers/:id/complaints/:complaintId
 // @access  Admin only
-export const updateComplaintStatus = async (req, res) => {
+export const updateComplaintStatus = asyncHandler(async (req, res) => {
+  const { id, complaintId } = req.params;
+  const { status, resolution } = req.body;
+  
   try {
-    const { id, complaintId } = req.params;
-    const { status, adminNotes } = req.body;
-
-    const validStatuses = ['pending', 'investigating', 'resolved', 'dismissed'];
-    if (!validStatuses.includes(status)) {
-      return res.status(400).json({ message: 'Invalid complaint status' });
-    }
-
-    const laborer = await Laborer.findById(id);
+    // Check if laborer exists
+    const laborer = await Laborer.findById(id).select('name email');
+    
     if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+      return errorResponse(res, 'Laborer not found', 404);
     }
-
-    const complaint = laborer.complaintsReceived.id(complaintId);
+    
+    // Import Complaint model dynamically
+    const Complaint = (await import('../models/Complaint.js')).default;
+    
+    // Find and update complaint
+    const complaint = await Complaint.findOneAndUpdate(
+      { _id: complaintId, laborerId: id },
+      { 
+        status,
+        resolution,
+        resolvedBy: req.admin.id,
+        resolvedAt: new Date()
+      },
+      { new: true }
+    ).populate('userId', 'name email');
+    
     if (!complaint) {
-      return res.status(404).json({ message: 'Complaint not found' });
+      return errorResponse(res, 'Complaint not found', 404);
     }
-
-    const oldStatus = complaint.status;
-    complaint.status = status;
-    if (adminNotes) {
-      complaint.adminNotes = adminNotes;
-    }
-    if (status === 'resolved') {
-      complaint.resolvedAt = new Date();
-      complaint.resolvedBy = req.admin.id;
-    }
-
-    await laborer.save();
-
+    
     // Log the action
     await AdminLog.createLog({
       adminId: req.admin.id,
-      action: 'COMPLAINT_MANAGEMENT',
-      details: `Updated complaint status from ${oldStatus} to ${status} for laborer ${laborer.user}`,
-      severity: 'MEDIUM',
-      status: 'SUCCESS',
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Updated complaint status for laborer ${laborer.email} - Status: ${status}`,
+      severity: SEVERITY_LEVELS.MEDIUM,
+      status: LOG_STATUS.SUCCESS,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      metadata: { laborerId: id, complaintId, oldStatus, newStatus: status }
+      metadata: { complaintId, oldStatus: complaint.status, newStatus: status },
+      correlationId: req.correlationId
     });
-
-    res.status(200).json({
+    
+    // Notify user who filed the complaint
+    if (complaint.userId) {
+      await notificationQueue.add('user-notification', {
+        subject: 'Complaint Update',
+        message: `Your complaint against ${laborer.name} has been updated to ${status}. ${resolution ? `Resolution: ${resolution}` : ''}`,
+        userId: complaint.userId._id,
+        correlationId: req.correlationId
+      });
+    }
+    
+    return successResponse(res, {
       message: 'Complaint status updated successfully',
       complaint
     });
   } catch (error) {
-    console.error('Error updating complaint status:', error);
-    res.status(500).json({ message: 'Failed to update complaint status' });
+    logger.error({
+      message: 'Error updating complaint status',
+      error: error.message,
+      stack: error.stack,
+      laborerId: id,
+      complaintId,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    return errorResponse(res, 'Failed to update complaint status', 500);
   }
-};
+});
 
 // @desc    Send warning to laborer
 // @route   POST /api/admin/laborers/:id/warning
 // @access  Admin only
-export const sendWarning = async (req, res) => {
+export const sendWarning = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { subject, message, severity } = req.body;
+  
   try {
-    const { id } = req.params;
-    const { reason, details } = req.body;
-
-    if (!reason || !details) {
-      return res.status(400).json({ message: 'Reason and details are required' });
-    }
-
-    const laborer = await Laborer.findById(id).populate('user', 'name email phone');
+    // Check if laborer exists
+    const laborer = await Laborer.findById(id);
+    
     if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+      return errorResponse(res, 'Laborer not found', 404);
     }
-
-    // Add warning to laborer
-    await laborer.addWarning(req.admin.id, reason, details);
-
+    
+    // Create warning record
+    const Warning = (await import('../models/Warning.js')).default;
+    
+    const warning = await Warning.create({
+      laborerId: id,
+      adminId: req.admin.id,
+      subject,
+      message,
+      severity: severity || 'MEDIUM'
+    });
+    
     // Send notification to laborer
-    if (laborer.user.email) {
-      await sendEmail({
-        to: laborer.user.email,
-        subject: '⚠️ Warning Notice - LabourConnect',
-        html: `
-          <h2>⚠️ Warning Notice</h2>
-          <p>Dear ${laborer.user.name},</p>
-          <p>You have received a warning from the LabourConnect administration.</p>
-          <p><strong>Reason:</strong> ${reason}</p>
-          <p><strong>Details:</strong> ${details}</p>
-          <p>Please review our terms of service and ensure compliance to avoid further action.</p>
-          <p>If you have any questions, please contact our support team.</p>
-          <p>Best regards,<br>LabourConnect Team</p>
-        `
-      });
-    }
-
+    await notificationQueue.add('laborer-notification', {
+      subject: `WARNING: ${subject}`,
+      message,
+      laborerId: id,
+      correlationId: req.correlationId
+    });
+    
     // Log the action
     await AdminLog.createLog({
       adminId: req.admin.id,
-      action: 'LABORER_WARNING',
-      details: `Sent warning to laborer ${laborer.user.name} - ${reason}`,
-      severity: 'HIGH',
-      status: 'SUCCESS',
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Sent warning to laborer ${laborer.email} - ${subject}`,
+      severity: SEVERITY_LEVELS.HIGH,
+      status: LOG_STATUS.SUCCESS,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      metadata: { laborerId: id, reason, details }
+      metadata: { warningSeverity: severity, subject },
+      correlationId: req.correlationId
     });
-
-    res.status(200).json({
+    
+    return successResponse(res, {
       message: 'Warning sent successfully',
-      warning: laborer.warnings[laborer.warnings.length - 1]
+      warning
     });
   } catch (error) {
-    console.error('Error sending warning:', error);
-    res.status(500).json({ message: 'Failed to send warning' });
+    logger.error({
+      message: 'Error sending warning to laborer',
+      error: error.message,
+      stack: error.stack,
+      laborerId: id,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    return errorResponse(res, 'Failed to send warning', 500);
   }
-};
+});
 
-// @desc    Suspend laborer account
+// @desc    Suspend laborer
 // @route   POST /api/admin/laborers/:id/suspend
 // @access  Admin only
-export const suspendLaborer = async (req, res) => {
+export const suspendLaborer = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason, duration } = req.body;
+  
   try {
-    const { id } = req.params;
-    const { reason, endDate } = req.body;
-
-    if (!reason) {
-      return res.status(400).json({ message: 'Suspension reason is required' });
-    }
-
-    const laborer = await Laborer.findById(id).populate('user', 'name email phone');
+    // Check if laborer exists
+    const laborer = await Laborer.findById(id);
+    
     if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+      return errorResponse(res, 'Laborer not found', 404);
     }
-
-    // Suspend laborer
-    await laborer.suspend(req.admin.id, reason, endDate ? new Date(endDate) : null);
-
+    
+    // Calculate suspension end date
+    const suspensionDays = parseInt(duration) || 7; // Default 7 days
+    const suspendedUntil = new Date();
+    suspendedUntil.setDate(suspendedUntil.getDate() + suspensionDays);
+    
+    // Update laborer status
+    laborer.status = LABORER_STATUSES.SUSPENDED;
+    laborer.statusReason = reason || 'Suspended by admin';
+    laborer.suspendedUntil = suspendedUntil;
+    laborer.suspendedBy = req.admin.id;
+    laborer.suspendedAt = new Date();
+    
+    await laborer.save();
+    
     // Send notification to laborer
-    if (laborer.user.email) {
-      await sendEmail({
-        to: laborer.user.email,
-        subject: '🚫 Account Suspended - LabourConnect',
-        html: `
-          <h2>🚫 Account Suspension Notice</h2>
-          <p>Dear ${laborer.user.name},</p>
-          <p>Your LabourConnect account has been suspended.</p>
-          <p><strong>Reason:</strong> ${reason}</p>
-          ${endDate ? `<p><strong>Suspension Period:</strong> Until ${new Date(endDate).toLocaleDateString()}</p>` : '<p><strong>Suspension Period:</strong> Indefinite</p>'}
-          <p>During this period, you will not be able to access your account or receive job opportunities.</p>
-          <p>If you believe this is an error, please contact our support team.</p>
-          <p>Best regards,<br>LabourConnect Team</p>
-        `
-      });
-    }
-
-    // Notify other admins
-    await notifyAdmins({
-      subject: 'Laborer Account Suspended',
-      message: `Admin ${req.admin.name} suspended laborer ${laborer.user.name}. Reason: ${reason}`,
-      excludeAdminId: req.admin.id
+    await notificationQueue.add('laborer-notification', {
+      subject: 'Account Suspended',
+      message: `Your account has been suspended until ${suspendedUntil.toISOString().split('T')[0]}. Reason: ${reason || 'Violation of terms of service'}`,
+      laborerId: id,
+      correlationId: req.correlationId
     });
-
+    
+    // Notify other admins
+    await notificationQueue.add('admin-notification', {
+      subject: 'Laborer Suspended',
+      message: `Admin ${req.admin.name} suspended laborer ${laborer.email} for ${suspensionDays} days. Reason: ${reason || 'No reason provided'}`,
+      excludeAdminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
     // Log the action
     await AdminLog.createLog({
       adminId: req.admin.id,
-      action: 'LABORER_SUSPENSION',
-      details: `Suspended laborer ${laborer.user.name} - ${reason}`,
-      severity: 'HIGH',
-      status: 'SUCCESS',
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Suspended laborer ${laborer.email} for ${suspensionDays} days`,
+      severity: SEVERITY_LEVELS.HIGH,
+      status: LOG_STATUS.SUCCESS,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      metadata: { laborerId: id, reason, endDate }
+      metadata: { reason, suspensionDays, suspendedUntil },
+      correlationId: req.correlationId
     });
-
-    res.status(200).json({
+    
+    return successResponse(res, {
       message: 'Laborer suspended successfully',
-      suspension: laborer.suspensions[laborer.suspensions.length - 1]
+      laborer: {
+        id: laborer._id,
+        email: laborer.email,
+        name: laborer.name,
+        status: laborer.status,
+        suspendedUntil,
+        statusReason: laborer.statusReason
+      }
     });
   } catch (error) {
-    console.error('Error suspending laborer:', error);
-    res.status(500).json({ message: 'Failed to suspend laborer' });
+    logger.error({
+      message: 'Error suspending laborer',
+      error: error.message,
+      stack: error.stack,
+      laborerId: id,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    return errorResponse(res, 'Failed to suspend laborer', 500);
   }
-};
+});
 
-// @desc    Unsuspend laborer account
+// @desc    Unsuspend laborer
 // @route   POST /api/admin/laborers/:id/unsuspend
 // @access  Admin only
-export const unsuspendLaborer = async (req, res) => {
+export const unsuspendLaborer = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { reason } = req.body;
+  
   try {
-    const { id } = req.params;
-
-    const laborer = await Laborer.findById(id).populate('user', 'name email phone');
+    // Check if laborer exists
+    const laborer = await Laborer.findById(id);
+    
     if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+      return errorResponse(res, 'Laborer not found', 404);
     }
-
-    // Unsuspend laborer
-    await laborer.unsuspend();
-
+    
+    // Check if laborer is suspended
+    if (laborer.status !== LABORER_STATUSES.SUSPENDED) {
+      return errorResponse(res, 'Laborer is not suspended', 400);
+    }
+    
+    // Update laborer status
+    laborer.status = LABORER_STATUSES.ACTIVE;
+    laborer.statusReason = reason || 'Unsuspended by admin';
+    laborer.suspendedUntil = null;
+    
+    await laborer.save();
+    
     // Send notification to laborer
-    if (laborer.user.email) {
-      await sendEmail({
-        to: laborer.user.email,
-        subject: '✅ Account Reactivated - LabourConnect',
-        html: `
-          <h2>✅ Account Reactivated</h2>
-          <p>Dear ${laborer.user.name},</p>
-          <p>Your LabourConnect account has been reactivated.</p>
-          <p>You can now access your account and receive job opportunities.</p>
-          <p>Please ensure you follow our terms of service to avoid future issues.</p>
-          <p>Best regards,<br>LabourConnect Team</p>
-        `
-      });
-    }
-
+    await notificationQueue.add('laborer-notification', {
+      subject: 'Account Unsuspended',
+      message: `Your account has been unsuspended and is now active. ${reason ? `Reason: ${reason}` : ''}`,
+      laborerId: id,
+      correlationId: req.correlationId
+    });
+    
+    // Notify other admins
+    await notificationQueue.add('admin-notification', {
+      subject: 'Laborer Unsuspended',
+      message: `Admin ${req.admin.name} unsuspended laborer ${laborer.email}. Reason: ${reason || 'No reason provided'}`,
+      excludeAdminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
     // Log the action
     await AdminLog.createLog({
       adminId: req.admin.id,
-      action: 'LABORER_UNSUSPENSION',
-      details: `Unsuspended laborer ${laborer.user.name}`,
-      severity: 'MEDIUM',
-      status: 'SUCCESS',
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Unsuspended laborer ${laborer.email}`,
+      severity: SEVERITY_LEVELS.MEDIUM,
+      status: LOG_STATUS.SUCCESS,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      metadata: { laborerId: id }
+      metadata: { reason },
+      correlationId: req.correlationId
     });
-
-    res.status(200).json({
-      message: 'Laborer unsuspended successfully'
+    
+    return successResponse(res, {
+      message: 'Laborer unsuspended successfully',
+      laborer: {
+        id: laborer._id,
+        email: laborer.email,
+        name: laborer.name,
+        status: laborer.status,
+        statusReason: laborer.statusReason
+      }
     });
   } catch (error) {
-    console.error('Error unsuspending laborer:', error);
-    res.status(500).json({ message: 'Failed to unsuspend laborer' });
+    logger.error({
+      message: 'Error unsuspending laborer',
+      error: error.message,
+      stack: error.stack,
+      laborerId: id,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    return errorResponse(res, 'Failed to unsuspend laborer', 500);
   }
-};
+});
 
-// @desc    Send notification to laborer(s)
+// @desc    Send notification to laborers
 // @route   POST /api/admin/laborers/notify
 // @access  Admin only
-export const sendNotificationToLaborers = async (req, res) => {
+export const sendNotificationToLaborers = asyncHandler(async (req, res) => {
+  const { subject, message, laborerIds, filter } = req.body;
+  
+  if (!subject || !message) {
+    return errorResponse(res, 'Subject and message are required', 400);
+  }
+  
   try {
-    const { laborerIds, specialization, message, subject, type = 'general' } = req.body;
-
-    if (!message || !subject) {
-      return res.status(400).json({ message: 'Subject and message are required' });
+    let targetLaborers = [];
+    
+    // If specific laborer IDs are provided
+    if (laborerIds && Array.isArray(laborerIds) && laborerIds.length > 0) {
+      targetLaborers = await Laborer.find({ 
+        _id: { $in: laborerIds },
+        isDeleted: { $ne: true }
+      }).select('_id name email').lean();
+    } 
+    // If filter criteria are provided
+    else if (filter) {
+      const queryFilter = { isDeleted: { $ne: true }, ...filter };
+      targetLaborers = await Laborer.find(queryFilter)
+        .select('_id name email')
+        .lean();
+    } 
+    // No target specified
+    else {
+      return errorResponse(res, 'Either laborerIds or filter must be provided', 400);
     }
-
-    let query = { isDeleted: { $ne: true } };
-
-    // Build query based on filters
-    if (laborerIds && laborerIds.length > 0) {
-      query._id = { $in: laborerIds };
-    } else if (specialization) {
-      query.specialization = specialization;
+    
+    if (targetLaborers.length === 0) {
+      return errorResponse(res, 'No laborers found matching the criteria', 404);
     }
-
-    const laborers = await Laborer.find(query).populate('user', 'name email phone');
-
-    if (laborers.length === 0) {
-      return res.status(404).json({ message: 'No laborers found matching criteria' });
+    
+    // Add notification jobs to queue
+    const notificationJobs = targetLaborers.map(laborer => ({
+      subject,
+      message,
+      laborerId: laborer._id,
+      correlationId: req.correlationId
+    }));
+    
+    // Add jobs in batches to avoid overwhelming the queue
+    const batchSize = 50;
+    for (let i = 0; i < notificationJobs.length; i += batchSize) {
+      const batch = notificationJobs.slice(i, i + batchSize);
+      await Promise.all(
+        batch.map(job => notificationQueue.add('laborer-notification', job))
+      );
     }
-
-    let successCount = 0;
-    let failureCount = 0;
-
-    // Send notifications
-    for (const laborer of laborers) {
-      try {
-        // Send email notification
-        if (laborer.user.email) {
-          await sendEmail({
-            to: laborer.user.email,
-            subject: `📢 ${subject} - LabourConnect`,
-            html: `
-              <h2>📢 ${subject}</h2>
-              <p>Dear ${laborer.user.name},</p>
-              <p>${message}</p>
-              <p>Best regards,<br>LabourConnect Team</p>
-            `
-          });
-        }
-
-        // Send SMS notification if phone is available
-        if (laborer.user.phone) {
-          await sendSMS({
-            to: laborer.user.phone,
-            message: `LabourConnect: ${subject} - ${message}`
-          });
-        }
-
-        successCount++;
-      } catch (error) {
-        console.error(`Error notifying laborer ${laborer.user.name}:`, error);
-        failureCount++;
-      }
-    }
-
+    
     // Log the action
     await AdminLog.createLog({
       adminId: req.admin.id,
-      action: 'LABORER_NOTIFICATION',
-      details: `Sent notification to ${successCount} laborers - ${subject}`,
-      severity: 'MEDIUM',
-      status: 'SUCCESS',
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Sent notification to ${targetLaborers.length} laborers - ${subject}`,
+      severity: SEVERITY_LEVELS.MEDIUM,
+      status: LOG_STATUS.SUCCESS,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
       metadata: { 
-        totalLaborers: laborers.length, 
-        successCount, 
-        failureCount, 
-        subject, 
-        type,
-        specialization: specialization || 'all'
-      }
+        recipientCount: targetLaborers.length,
+        subject,
+        filter: filter || null,
+        specificLaborers: laborerIds ? true : false
+      },
+      correlationId: req.correlationId
     });
-
-    res.status(200).json({
-      message: `Notification sent successfully`,
-      totalLaborers: laborers.length,
-      successCount,
-      failureCount
+    
+    return successResponse(res, {
+      message: `Notification queued for ${targetLaborers.length} laborers`,
+      recipientCount: targetLaborers.length
     });
   } catch (error) {
-    console.error('Error sending notifications:', error);
-    res.status(500).json({ message: 'Failed to send notifications' });
-  }
-};
-
-// @desc    Export laborer data
-// @route   GET /api/admin/laborers/export
-// @access  Admin only
-export const exportLaborerData = async (req, res) => {
-  try {
-    const { format = 'csv', specialization = '', status = '', verified = '', rating = '' } = req.query;
-
-    // Build filter
-    const filter = { isDeleted: { $ne: true } };
-    
-    if (specialization) filter.specialization = specialization;
-    if (status) filter.status = status;
-    if (verified !== '') filter.isVerified = verified === 'true';
-    if (rating) filter.rating = { $gte: parseFloat(rating) };
-
-    const laborers = await Laborer.find(filter)
-      .populate('user', 'name email phone address createdAt')
-      .lean();
-
-    // Prepare export data
-    const exportData = laborers.map(laborer => ({
-      'Laborer ID': laborer._id,
-      'Name': laborer.user?.name || 'N/A',
-      'Email': laborer.user?.email || 'N/A',
-      'Phone': laborer.user?.phone || 'N/A',
-      'Specialization': laborer.specialization,
-      'Experience (Years)': laborer.experience,
-      'Rating': laborer.rating,
-      'Total Reviews': laborer.numReviews,
-      'Status': laborer.status,
-      'Verified': laborer.isVerified ? 'Yes' : 'No',
-      'Available': laborer.isAvailable ? 'Yes' : 'No',
-      'Availability': laborer.availability,
-      'Total Jobs': laborer.totalJobsCompleted,
-      'Total Earnings': laborer.totalEarnings,
-      'Complaints': laborer.complaintsReceived?.length || 0,
-      'Warnings': laborer.warnings?.length || 0,
-      'Registration Date': laborer.createdAt,
-      'Last Active': laborer.lastActive,
-      'Address': laborer.user?.address || 'N/A'
-    }));
-
-    if (format === 'json') {
-      res.setHeader('Content-Type', 'application/json');
-      res.setHeader('Content-Disposition', `attachment; filename=laborers_${Date.now()}.json`);
-      return res.json(exportData);
-    }
-
-    // CSV format (default)
-    if (exportData.length === 0) {
-      return res.status(404).json({ message: 'No data to export' });
-    }
-
-    const csvHeaders = Object.keys(exportData[0]).join(',');
-    const csvRows = exportData.map(row => 
-      Object.values(row).map(value => 
-        typeof value === 'string' && value.includes(',') ? `"${value}"` : value
-      ).join(',')
-    );
-    const csvContent = [csvHeaders, ...csvRows].join('\n');
-
-    res.setHeader('Content-Type', 'text/csv');
-    res.setHeader('Content-Disposition', `attachment; filename=laborers_${Date.now()}.csv`);
-    
-    // Log the action
-    await AdminLog.createLog({
+    logger.error({
+      message: 'Error sending notifications to laborers',
+      error: error.message,
+      stack: error.stack,
       adminId: req.admin.id,
-      action: 'DATA_EXPORT',
-      details: `Exported ${exportData.length} laborer records in ${format.toUpperCase()} format`,
-      severity: 'MEDIUM',
-      status: 'SUCCESS',
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
-      metadata: { format, recordCount: exportData.length, filters: { specialization, status, verified, rating } }
+      correlationId: req.correlationId
     });
-
-    res.send(csvContent);
-  } catch (error) {
-    console.error('Error exporting laborer data:', error);
-    res.status(500).json({ message: 'Failed to export laborer data' });
+    
+    return errorResponse(res, 'Failed to send notifications', 500);
   }
-};
+});
 
 // @desc    Get laborer reviews
 // @route   GET /api/admin/laborers/:id/reviews
 // @access  Admin only
-export const getLaborerReviews = async (req, res) => {
+export const getLaborerReviews = asyncHandler(async (req, res) => {
+  const { id } = req.params;
+  const { page = 1, limit = 10, status = '' } = req.query;
+  
   try {
-    const { id } = req.params;
-    const { page = 1, limit = 10, rating = '', flagged = '' } = req.query;
-
-    // This would depend on your Review model structure
-    // For now, I'll provide a basic implementation
-    const laborer = await Laborer.findById(id).populate('user', 'name');
+    // Check if laborer exists
+    const laborer = await Laborer.findById(id).select('name email rating');
     
     if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+      return errorResponse(res, 'Laborer not found', 404);
     }
-
-    // You would need to implement this based on your Review model
-    // This is a placeholder implementation
-    const reviews = {
-      reviews: [],
-      pagination: {
-        currentPage: parseInt(page),
-        totalPages: 0,
-        totalReviews: 0,
-        hasNextPage: false,
-        hasPrevPage: false
-      },
-      stats: {
-        averageRating: laborer.rating,
-        totalReviews: laborer.numReviews,
-        ratingDistribution: {
-          5: 0, 4: 0, 3: 0, 2: 0, 1: 0
-        }
-      }
-    };
-
-    res.status(200).json(reviews);
-  } catch (error) {
-    console.error('Error getting laborer reviews:', error);
-    res.status(500).json({ message: 'Failed to get laborer reviews' });
-  }
-};
-
-// @desc    Approve/Reject portfolio item
-// @route   PUT /api/admin/laborers/:id/portfolio/:portfolioId
-// @access  Admin only
-export const moderatePortfolioItem = async (req, res) => {
-  try {
-    const { id, portfolioId } = req.params;
-    const { isApproved, reason } = req.body;
-
-    const laborer = await Laborer.findById(id);
-    if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+    
+    // Build filter
+    const filter = { laborerId: id };
+    
+    if (status) {
+      filter.status = status;
     }
-
-    const portfolioItem = laborer.portfolio.id(portfolioId);
-    if (!portfolioItem) {
-      return res.status(404).json({ message: 'Portfolio item not found' });
-    }
-
-    portfolioItem.isApproved = isApproved;
-    if (reason) {
-      portfolioItem.moderationReason = reason;
-    }
-    portfolioItem.moderatedBy = req.admin.id;
-    portfolioItem.moderatedAt = new Date();
-
-    await laborer.save();
-
+    
+    // Import Review model dynamically
+    const Review = (await import('../models/Review.js')).default;
+    
+    // Get reviews with pagination
+    const reviews = await Review.find(filter)
+      .sort({ createdAt: -1 })
+      .skip((page - 1) * limit)
+      .limit(parseInt(limit))
+      .populate('userId', 'name email')
+      .lean();
+    
+    // Get total count
+    const totalReviews = await Review.countDocuments(filter);
+    const totalPages = Math.ceil(totalReviews / limit);
+    
     // Log the action
     await AdminLog.createLog({
       adminId: req.admin.id,
-      action: 'PORTFOLIO_MODERATION',
-      details: `${isApproved ? 'Approved' : 'Rejected'} portfolio item for laborer ${laborer.user}`,
-      severity: 'LOW',
-      status: 'SUCCESS',
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Viewed reviews for laborer ${laborer.email}`,
+      severity: SEVERITY_LEVELS.LOW,
+      status: LOG_STATUS.SUCCESS,
       ipAddress: req.ip,
       userAgent: req.get('User-Agent'),
-      metadata: { laborerId: id, portfolioId, isApproved, reason }
+      correlationId: req.correlationId
     });
+    
+    return successResponse(res, {
+      laborer: {
+        id: laborer._id,
+        name: laborer.name,
+        email: laborer.email,
+        rating: laborer.rating
+      },
+      reviews,
+      pagination: {
+        currentPage: parseInt(page),
+        totalPages,
+        totalReviews,
+        hasNextPage: page < totalPages,
+        hasPrevPage: page > 1
+      }
+    });
+  } catch (error) {
+    logger.error({
+      message: 'Error getting laborer reviews',
+      error: error.message,
+      stack: error.stack,
+      laborerId: id,
+      adminId: req.admin.id,
+      correlationId: req.correlationId
+    });
+    
+    return errorResponse(res, 'Failed to get laborer reviews', 500);
+  }
+});
 
-    res.status(200).json({
-      message: `Portfolio item ${isApproved ? 'approved' : 'rejected'} successfully`,
+// @desc    Moderate portfolio item
+// @route   PUT /api/admin/laborers/:id/portfolio/:portfolioId
+// @access  Admin only
+export const moderatePortfolioItem = asyncHandler(async (req, res) => {
+  const { id, portfolioId } = req.params;
+  const { status, reason } = req.body;
+  
+  try {
+    // Check if laborer exists
+    const laborer = await Laborer.findById(id);
+    
+    if (!laborer) {
+      return errorResponse(res, 'Laborer not found', 404);
+    }
+    
+    // Find portfolio item
+    const portfolioItem = laborer.portfolio.id(portfolioId);
+    
+    if (!portfolioItem) {
+      return errorResponse(res, 'Portfolio item not found', 404);
+    }
+    
+    // Update portfolio item
+    portfolioItem.status = status;
+    portfolioItem.moderationReason = reason;
+    portfolioItem.moderatedBy = req.admin.id;
+    portfolioItem.moderatedAt = new Date();
+    
+    await laborer.save();
+    
+    // Send notification to laborer
+    await notificationQueue.add('laborer-notification', {
+      subject: 'Portfolio Item Moderation',
+      message: `Your portfolio item "${portfolioItem.title}" has been ${status.toLowerCase()}. ${reason ? `Reason: ${reason}` : ''}`,
+      laborerId: id,
+      correlationId: req.correlationId
+    });
+    
+    // Log the action
+    await AdminLog.createLog({
+      adminId: req.admin.id,
+      action: ADMIN_ACTIONS.LABORER_MANAGEMENT,
+      details: `Moderated portfolio item for laborer ${laborer.email} - Status: ${status}`,
+      severity: SEVERITY_LEVELS.MEDIUM,
+      status: LOG_STATUS.SUCCESS,
+      ipAddress: req.ip,
+      userAgent: req.get('User-Agent'),
+      metadata: { portfolioId, status, reason },
+      correlationId: req.correlationId
+    });
+    
+    return successResponse(res, {
+      message: 'Portfolio item moderated successfully',
       portfolioItem
     });
   } catch (error) {
-    console.error('Error moderating portfolio item:', error);
-    res.status(500).json({ message: 'Failed to moderate portfolio item' });
-  }
-};
-
-// @desc    Add new laborer
-// @route   POST /api/admin/laborers
-// @access  Admin only
-export const addLaborer = async (req, res) => {
-  try {
-    const {
-      name,
-      email,
-      phone,
-      address,
-      specialization,
-      experience,
-      availability,
-      rating,
-      socialLinks
-    } = req.body;
-
-    // Validate required fields
-    if (!name || !email || !phone || !specialization) {
-      return res.status(400).json({
-        success: false,
-        message: 'Name, email, phone, and specialization are required'
-      });
-    }
-
-    // Check if user already exists
-    const existingUser = await User.findOne({ email });
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: 'User with this email already exists'
-      });
-    }
-
-    // Create user account
-    const hashedPassword = await bcrypt.hash('laborer123', 10); // Default password
-    const user = new User({
-      name,
-      email,
-      phone,
-      password: hashedPassword,
-      role: 'laborer',
-      address,
-      isActive: true
-    });
-
-    const savedUser = await user.save();
-
-    // Create laborer profile
-    const laborer = new Laborer({
-      user: savedUser._id,
-      specialization,
-      experience: experience || 0,
-      availability: availability || 'offline',
-      rating: rating || 0,
-      socialLinks: socialLinks || {},
-      isVerified: false, // Requires admin verification
-      isApproved: false, // Requires admin approval
-      status: 'inactive' // Start as inactive until verified
-    });
-
-    const savedLaborer = await laborer.save();
-
-    // Populate user data for response
-    await savedLaborer.populate('user', 'name email phone address');
-
-    // Log the action
-    await AdminLog.createLog({
+    logger.error({
+      message: 'Error moderating portfolio item',
+      error: error.message,
+      stack: error.stack,
+      laborerId: id,
+      portfolioId,
       adminId: req.admin.id,
-      action: 'LABORER_CREATION',
-      details: `Added new laborer ${name} (${specialization})`,
-      severity: 'MEDIUM',
-      status: 'SUCCESS',
-      ipAddress: req.ip,
-      userAgent: req.get('User-Agent'),
-      metadata: { laborerId: savedLaborer._id, email, specialization }
+      correlationId: req.correlationId
     });
-
-    res.status(201).json({
-      success: true,
-      message: 'Laborer added successfully. Verification required.',
-      laborer: savedLaborer
-    });
-
-  } catch (error) {
-    console.error('Add laborer error:', error);
-    res.status(500).json({
-      success: false,
-      message: 'Failed to add laborer',
-      error: error.message
-    });
+    
+    return errorResponse(res, 'Failed to moderate portfolio item', 500);
   }
-}; 
+});

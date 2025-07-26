@@ -1,5 +1,4 @@
 import axiosInstance from '../utils/axiosInstance';
-
 class LaborerService {
   // Get laborer dashboard
   async getDashboard() {

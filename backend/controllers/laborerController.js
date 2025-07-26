@@ -1,24 +1,8 @@
 import User from '../models/User.js';
 import Job from '../models/Job.js';
 import JobApplication from '../models/JobApplication.js';
-import multer from 'multer';
-import path from 'path';
-import { fileURLToPath } from 'url';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
-// Configure multer for file uploads
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '../uploads/'));
-  },
-  filename: (req, file, cb) => {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
-});
-
-const upload = multer({ storage: storage });
+import { handleControllerError } from '../middlewares/errorHandler.js';
+import { upload } from '../middlewares/uploadMiddleware.js';
 
 // Get job requests for laborer
 export const getJobRequests = async (req, res) => {
@@ -42,10 +26,12 @@ export const getJobRequests = async (req, res) => {
       scheduledDate: request.job.scheduledDate
     }));
     
-    res.json({ requests });
+    res.status(200).json({
+      success: true,
+      requests
+    });
   } catch (error) {
-    console.error('Error fetching job requests:', error);
-    res.status(500).json({ message: 'Failed to fetch job requests' });
+    handleControllerError(error, res, 'fetch job requests');
   }
 };
 
@@ -61,7 +47,10 @@ export const handleJobAction = async (req, res) => {
     });
     
     if (!jobApplication) {
-      return res.status(404).json({ message: 'Job application not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Job application not found'
+      });
     }
     
     if (action === 'accept') {
@@ -74,10 +63,12 @@ export const handleJobAction = async (req, res) => {
     
     await jobApplication.save();
     
-    res.json({ message: `Job ${action}ed successfully` });
+    res.status(200).json({
+      success: true,
+      message: `Job ${action}ed successfully`
+    });
   } catch (error) {
-    console.error('Error handling job action:', error);
-    res.status(500).json({ message: 'Failed to process job action' });
+    handleControllerError(error, res, 'process job action');
   }
 };
 
@@ -102,13 +93,18 @@ export const updateProfile = async (req, res) => {
     );
     
     if (!updatedLaborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Laborer not found'
+      });
     }
     
-    res.json({ laborer: updatedLaborer });
+    res.status(200).json({
+      success: true,
+      laborer: updatedLaborer
+    });
   } catch (error) {
-    console.error('Error updating laborer profile:', error);
-    res.status(500).json({ message: 'Failed to update profile' });
+    handleControllerError(error, res, 'update profile');
   }
 };
 
@@ -125,13 +121,18 @@ export const updateAvailability = async (req, res) => {
     );
     
     if (!updatedLaborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Laborer not found'
+      });
     }
     
-    res.json({ laborer: updatedLaborer });
+    res.status(200).json({
+      success: true,
+      laborer: updatedLaborer
+    });
   } catch (error) {
-    console.error('Error updating availability:', error);
-    res.status(500).json({ message: 'Failed to update availability' });
+    handleControllerError(error, res, 'update availability');
   }
 };
 
@@ -152,6 +153,11 @@ export const uploadDocuments = async (req, res) => {
           }
         }
       });
+    } else {
+      return res.status(400).json({
+        success: false,
+        message: 'No files uploaded'
+      });
     }
     
     const updatedLaborer = await User.findByIdAndUpdate(
@@ -161,13 +167,19 @@ export const uploadDocuments = async (req, res) => {
     );
     
     if (!updatedLaborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Laborer not found'
+      });
     }
     
-    res.json({ message: 'Documents uploaded successfully', laborer: updatedLaborer });
+    res.status(200).json({
+      success: true,
+      message: 'Documents uploaded successfully',
+      laborer: updatedLaborer
+    });
   } catch (error) {
-    console.error('Error uploading documents:', error);
-    res.status(500).json({ message: 'Failed to upload documents' });
+    handleControllerError(error, res, 'upload documents');
   }
 };
 
@@ -179,13 +191,18 @@ export const getPortfolio = async (req, res) => {
     const laborer = await User.findById(laborerId).select('portfolio');
     
     if (!laborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Laborer not found'
+      });
     }
     
-    res.json({ portfolio: laborer.portfolio || [] });
+    res.status(200).json({
+      success: true,
+      portfolio: laborer.portfolio || []
+    });
   } catch (error) {
-    console.error('Error fetching portfolio:', error);
-    res.status(500).json({ message: 'Failed to fetch portfolio' });
+    handleControllerError(error, res, 'fetch portfolio');
   }
 };
 
@@ -196,7 +213,10 @@ export const addPortfolioItem = async (req, res) => {
     const { title, description, category } = req.body;
     
     if (!req.file) {
-      return res.status(400).json({ message: 'Image is required' });
+      return res.status(400).json({
+        success: false,
+        message: 'Image is required'
+      });
     }
     
     const portfolioItem = {
@@ -214,16 +234,19 @@ export const addPortfolioItem = async (req, res) => {
     );
     
     if (!updatedLaborer) {
-      return res.status(404).json({ message: 'Laborer not found' });
+      return res.status(404).json({
+        success: false,
+        message: 'Laborer not found'
+      });
     }
     
-    res.json({ 
+    res.status(201).json({
+      success: true,
       message: 'Portfolio item added successfully',
       item: portfolioItem
     });
   } catch (error) {
-    console.error('Error adding portfolio item:', error);
-    res.status(500).json({ message: 'Failed to add portfolio item' });
+    handleControllerError(error, res, 'add portfolio item');
   }
 };
 
@@ -260,7 +283,8 @@ export const getEarnings = async (req, res) => {
     );
     const thisWeekEarnings = thisWeekJobs.reduce((sum, job) => sum + (job.job.budget || 0), 0);
     
-    res.json({
+    res.status(200).json({
+      success: true,
       earnings: {
         total,
         thisMonth: thisMonthEarnings,
@@ -268,8 +292,7 @@ export const getEarnings = async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error fetching earnings:', error);
-    res.status(500).json({ message: 'Failed to fetch earnings' });
+    handleControllerError(error, res, 'fetch earnings');
   }
 };
 
@@ -295,14 +318,16 @@ export const getCompletedJobs = async (req, res) => {
       review: job.review
     }));
     
-    res.json({ jobs });
+    res.status(200).json({
+      success: true,
+      jobs
+    });
   } catch (error) {
-    console.error('Error fetching completed jobs:', error);
-    res.status(500).json({ message: 'Failed to fetch completed jobs' });
+    handleControllerError(error, res, 'fetch completed jobs');
   }
 };
 
-// New controller method to browse laborers with pagination, filtering, and sorting
+// Browse laborers with pagination, filtering, and sorting
 export const browseLaborers = async (req, res) => {
   try {
     const {
@@ -322,9 +347,13 @@ export const browseLaborers = async (req, res) => {
 
     if (search) {
       query.$or = [
-        { name: { $regex: search, $options: 'i' } },
-        { _id: search }
+        { name: { $regex: search, $options: 'i' } }
       ];
+      
+      // Only add _id search if it's a valid MongoDB ObjectId
+      if (/^[0-9a-fA-F]{24}$/.test(search)) {
+        query.$or.push({ _id: search });
+      }
     }
 
     if (skill) {
@@ -336,7 +365,10 @@ export const browseLaborers = async (req, res) => {
     }
 
     if (minPrice || maxPrice) {
-      query.dailyRate = { $gte: Number(minPrice), $lte: Number(maxPrice) };
+      query.dailyRate = { 
+        $gte: Number(minPrice), 
+        $lte: Number(maxPrice) !== Number.MAX_SAFE_INTEGER ? Number(maxPrice) : Number.MAX_SAFE_INTEGER 
+      };
     }
 
     if (rating) {
@@ -348,24 +380,32 @@ export const browseLaborers = async (req, res) => {
     }
 
     const sortOrder = sort === 'asc' ? 1 : -1;
+    const pageNum = Number(page);
+    const limitNum = Number(limit);
 
     const total = await User.countDocuments(query);
+    const totalPages = Math.ceil(total / limitNum);
+    
     const laborers = await User.find(query)
       .sort({ rating: sortOrder })
-      .skip((page - 1) * limit)
-      .limit(Number(limit))
+      .skip((pageNum - 1) * limitNum)
+      .limit(limitNum)
       .select('-password');
 
-    res.json({
-      total,
-      page: Number(page),
-      limit: Number(limit),
+    res.status(200).json({
+      success: true,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        totalPages
+      },
       laborers
     });
   } catch (error) {
-    console.error('Error browsing laborers:', error);
-    res.status(500).json({ message: 'Failed to browse laborers' });
+    handleControllerError(error, res, 'browse laborers');
   }
 };
 
+// Export the upload middleware from uploadMiddleware.js instead
 export { upload };

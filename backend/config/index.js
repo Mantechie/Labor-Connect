@@ -1,5 +1,6 @@
 // Load environment variables
 import dotenv from 'dotenv';
+import path from 'path';
 dotenv.config();
 
 export default {
@@ -12,7 +13,7 @@ export default {
   
   // Database configuration
   database: {
-    uri: process.env.MONGODB_URI || 'mongodb://localhost:27017/labour-connect',
+    uri: process.env.MONGO_URI || 'mongodb://localhost:27017/labour-connect',
     options: {
       useNewUrlParser: true,
       useUnifiedTopology: true
@@ -37,6 +38,11 @@ export default {
     cookieSecure: process.env.NODE_ENV === 'production',
     cookieSameSite: 'strict'
   },
+
+  // File upload configuration
+  uploadDir: process.env.UPLOAD_DIR || path.join(path.dirname(new URL('.', import.meta.url).pathname), 'uploads'),
+  maxFileSize: parseInt(process.env.MAX_FILE_SIZE || '10485760', 10), // 10MB in bytes
+  
   
   // Rate limiting
   rateLimit: {

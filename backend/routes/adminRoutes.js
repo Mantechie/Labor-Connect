@@ -3,6 +3,7 @@ import { protectAdmin, hasPermission, isSuperAdmin } from '../middlewares/adminA
 import { preventPrivilegeEscalation, requirePermission } from '../middlewares/adminPrivilegeMiddleware.js';
 import { adminLogLimiter, logExportLimiter, securityOperationLimiter } from '../middlewares/adminRateLimiter.js';
 import csrf from 'csurf';
+import { addCorrelationId } from '../middlewares/correlationMiddleware.js';
 import {
   getAdminStats,
   getRecentActivity,
@@ -24,7 +25,12 @@ import {
 
 import {
   getAllLaborers,
-  updateLaborerVerification as verifyLaborer
+  getLaborerDetails,
+  updateLaborerStatus,
+  updateLaborerVerification,
+  deleteLaborer,
+  getLaborerStats,
+  exportLaborerData
 } from '../controllers/laborerManagementController.js';
 
 import {
@@ -37,6 +43,15 @@ import {
   exportLogs
 } from '../controllers/adminLogController.js';
 
+import { 
+  getLaborersValidation,
+  getLaborerDetailsValidation,
+  updateLaborerStatusValidation,
+  updateLaborerVerificationValidation,
+  deleteLaborerValidation,
+  exportLaborersValidation
+} from '../middlewares/laborerValidation.js';
+
 const router = express.Router();
 
 // CSRF protection for POST/PUT/DELETE requests
@@ -46,6 +61,13 @@ const csrfProtection = csrf({ cookie: true });
 router.use(csrfProtection);
 
 // All admin routes require admin authentication
+router.use(protectAdmin);
+
+
+// Apply correlation ID middleware to all routes
+router.use(addCorrelationId);
+
+// Apply admin protection middleware to all routes
 router.use(protectAdmin);
 
 // Dashboard and analytics
@@ -59,9 +81,14 @@ router.get('/users', requirePermission('manage_users'), getAllUsers);
 router.put('/users/:id/status', requirePermission('manage_users'), updateUserStatus);
 router.delete('/users/:id', requirePermission('manage_users'), deleteUser);
 
-// Laborer management
-router.get('/laborers', requirePermission('manage_laborers'), getAllLaborers);
-router.put('/laborers/:id/verify', requirePermission('manage_laborers'), verifyLaborer);
+// Laborer management routes
+router.get('/laborers', getLaborersValidation, getAllLaborers);
+router.get('/laborers/stats', getLaborerStats);
+router.get('/laborers/export', logExportLimiter, exportLaborersValidation, exportLaborerData);
+router.get('/laborers/:id', getLaborerDetailsValidation, getLaborerDetails);
+router.put('/laborers/:id/status', securityOperationLimiter, updateLaborerStatusValidation, updateLaborerStatus);
+router.put('/laborers/:id/verify', securityOperationLimiter, updateLaborerVerificationValidation, updateLaborerVerification);
+router.delete('/laborers/:id', securityOperationLimiter, deleteLaborerValidation, deleteLaborer);
 
 // Job management
 router.get('/jobs', requirePermission('manage_jobs'), getJobApplications);

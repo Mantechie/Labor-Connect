@@ -1,5 +1,3 @@
-// h:\Labour\backend\config\adminLogConfig.js
-
 /**
  * Configuration for admin log functionality
  * These values can be overridden by environment variables

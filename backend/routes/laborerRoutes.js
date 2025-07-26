@@ -10,26 +10,34 @@ import {
   addPortfolioItem,
   getEarnings,
   getCompletedJobs,
-  browseLaborers,
-  upload
+  browseLaborers
 } from '../controllers/laborerController.js';
+import { upload } from '../middlewares/uploadMiddleware.js';
+import { 
+  validateProfileUpdate, 
+  validateAvailabilityUpdate, 
+  validateJobAction, 
+  validatePortfolioItem,
+  validateBrowseLaborers
+} from '../validations/laborerValidations.js';
+import { apiLimiter } from '../middlewares/ratelimiter.js';
 
 const router = express.Router();
 
-// Browse route should be public (no authentication required)
-router.get('/browse', browseLaborers);
+// Browse route should be public (no authentication required) but rate limited
+router.get('/browse', apiLimiter, validateBrowseLaborers, browseLaborers);
 
 // All other routes require authentication
 router.use(protect);
 
 // Job management routes
 router.get('/job-requests', getJobRequests);
-router.put('/jobs/:jobId/:action', handleJobAction); // accept/reject
+router.put('/jobs/:jobId/:action', validateJobAction, handleJobAction);
 router.get('/completed-jobs', getCompletedJobs);
 
 // Profile management routes
-router.put('/profile', updateProfile);
-router.put('/availability', updateAvailability);
+router.put('/profile', validateProfileUpdate, updateProfile);
+router.put('/availability', validateAvailabilityUpdate, updateAvailability);
 
 // Document upload routes
 router.post('/documents', upload.fields([
@@ -41,11 +49,9 @@ router.post('/documents', upload.fields([
 
 // Portfolio routes
 router.get('/portfolio', getPortfolio);
-router.post('/portfolio', upload.single('image'), addPortfolioItem);
+router.post('/portfolio', upload.single('image'), validatePortfolioItem, addPortfolioItem);
 
 // Earnings routes
 router.get('/earnings', getEarnings);
-
-
 
 export default router;
