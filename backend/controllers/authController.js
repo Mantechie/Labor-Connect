@@ -13,22 +13,11 @@ import AppError from '../utils/AppError.js' // Custom error class
 import { blacklistToken } from '../utils/tokenBlacklist.js';
 import { authLogger } from '../utils/Logger.js';
 import { validatePasswordStrength } from '../utils/passwordPolicy.js';
+import { handleLoginAttempt, checkAccountLock } from '../utils/accountSecurity.js';
 
 import dotenv from 'dotenv' //Loads env variables (JWT_SECRET)
  
 dotenv.config() //Initialize env variables 
-
-// Generate JWT
-const generateToken = (id, role) => {
-  // Creates a signed JWT containing ID,role
-  // Uses JWT_SECRET from .env to sign the token
-  // Tokens expire after 30 days for better user experience
-  return jwt.sign({ id, role }, process.env.JWT_SECRET, {
-    expiresIn: '30d',
-  })
-}
-
-
 
 export const register = async (req, res, next) => {
   try {
@@ -98,6 +87,14 @@ export const register = async (req, res, next) => {
       role: newUser.role
     });
     
+    // Set refresh token as HTTP-only cookie
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 24 * 60 * 60 * 1000, // 60 days
+      path: '/api/auth/refresh'
+    });
     // Respond with user data + tokens (exclude sensitive data)
     res.status(201).json({
       message: 'Registration successful',
@@ -133,27 +130,69 @@ export const register = async (req, res, next) => {
 export const login = async (req, res) => {
   try {
     const { email, password } = req.body
-    
+    const ip = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
     // find user by email
     const user = await User.findOne({ email })
     if (!user) {
-      return res.status(401).json({ message: 'Invalid email or password' })
+      // Log failed login attempt for non-existent user
+      authLogger.login(null, email, false, ip, userAgent, {
+        reason: 'User not found'
+      });
+      
+      return res.status(401).json({ message: 'Invalid email or password' });
+    }
+    
+    // Check if account is locked
+    const lockStatus = checkAccountLock(user);
+    if (lockStatus.isLocked) {
+      // Log failed login attempt due to account lock
+      authLogger.login(user._id, email, false, ip, userAgent, {
+        reason: 'Account locked',
+        lockUntil: lockStatus.lockUntil
+      });
+      
+      return res.status(403).json({ 
+        message: `Account temporarily locked. Try again in ${lockStatus.timeLeft} minutes.` 
+      });
     }
 
     // Compare passwords
     // Uses bcrypt.compare to match hashed passwords
     const isMatch = await bcrypt.compare(password, user.password)
     if (!isMatch) {
-      return res.status(401).json({ message: 'Invalid email or password' })
+      // Handle failed login attempt
+      const attemptResult = await handleLoginAttempt(user, false);
+      
+      // Log failed login attempt
+      authLogger.login(user._id, email, false, ip, userAgent, {
+        reason: 'Invalid password',
+        attempts: user.loginAttempts,
+        isLocked: attemptResult.isLocked
+      });
+      
+      // If account is now locked, return lock message
+      if (attemptResult.isLocked) {
+        const timeLeft = Math.ceil((attemptResult.lockUntil - new Date()) / (60 * 1000));
+        return res.status(403).json({ 
+          message: `Too many failed attempts. Account locked for ${timeLeft} minutes.` 
+        });
+      }
+      
+      return res.status(401).json({ 
+        message: 'Invalid email or password',
+        attemptsRemaining: attemptResult.attemptsRemaining
+      });
     }
     
+    // Handle successful login attempt
+    await handleLoginAttempt(user, true);
     // Get client info for token metadata
-    const ip = req.ip || req.connection.remoteAddress
-    const userAgent = req.headers['user-agent']
-    const deviceId = req.headers['x-device-id'] || 'unknown'
+    const deviceId = req.headers['x-device-id'] || 'unknown';
 
     // Generate tokens
-    const token = generateToken(user._id, user.role, { ip, userAgent });
+    const token = generateAccessToken(user._id, user.role, { ip, userAgent });
     const refreshToken = generateRefreshToken(user._id, { ip, userAgent, deviceId });
     
     // Store refresh token in user document
@@ -170,8 +209,17 @@ export const login = async (req, res) => {
     await user.save();
 
     // Log successful login
-    console.log(`✅ User logged in: ${email} (${user._id})`)
+    authLogger.login(user._id, email, true, ip, userAgent);
     
+    
+    // Set refresh token as HTTP-only cookie
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production', // HTTPS only in production
+      sameSite: 'strict',
+      maxAge: 60 * 24 * 60 * 60 * 1000, // 60 days in milliseconds
+      path: '/api/auth/refresh' // Restrict to refresh endpoint
+    });
     // Respond with user data + tokens
     // Return token immediately after login
     res.status(200).json({
@@ -187,10 +235,20 @@ export const login = async (req, res) => {
       },
     })
   } catch (err) {
-    res.status(500).json({ message: err.message })
+    console.error('Login error:', err.message);
+    
+    // Log failed login attempt
+    authLogger.login(null, req.body.email, false, 
+      req.ip || req.connection.remoteAddress, 
+      req.headers['user-agent'], {
+        error: err.message
+      }
+    );
+    
+    // Single error response
     res.status(500).json({ 
       message: 'Login failed. Please try again.' 
-    })
+    });
   }
 }
 
@@ -363,7 +421,7 @@ export const verifyOtp = async (req, res) => {
     const deviceId = req.headers['x-device-id'] || 'unknown'
 
     // Generate JWT token and return user data
-    const token = generateToken(user._id, user.role, { ip, userAgent })
+    const token = generateAccessToken(user._id, user.role, { ip, userAgent })
     const refreshToken = generateRefreshToken(user._id, { ip, userAgent, deviceId })
     
     // Update user login information
@@ -403,7 +461,8 @@ export const verifyOtp = async (req, res) => {
 // @route   POST /api/auth/refresh
 export const refreshToken = async (req, res) => {
   try {
-    const { refreshToken: requestToken} = req.body;
+    // Get refresh token from cookies
+    const requestToken = req.cookies.refreshToken;
     
     if (!requestToken) {
       return res.status(400).json({ message: 'Refresh token is required' });
@@ -445,6 +504,15 @@ export const refreshToken = async (req, res) => {
     // Log token refresh
     console.log(`✅ Token refreshed for user: ${user.email} (${user._id})`)
     
+     // When sending the response, set the new refresh token as a cookie
+    res.cookie('refreshToken', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 60 * 24 * 60 * 60 * 1000, // 60 days
+      path: '/api/auth/refresh'
+    });
+
     res.json({
       token: newToken,
       refreshToken: newRefreshToken,
@@ -496,8 +564,16 @@ export const logout = async (req, res) => {
       
       await user.save();
       // Log logout
+       // Log logout
+      authLogger.logout(user._id, user.email, ip, userAgent);
+
       console.log(`✅ User logged out: ${user.email} (${user._id})`)
-    }  
+    } 
+    // Clear the refresh token cookie
+    res.clearCookie('refreshToken', {
+      path: '/api/auth/refresh'
+    });
+
     res.json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('Logout error:', error);

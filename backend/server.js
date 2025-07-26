@@ -24,9 +24,16 @@ import reportRoutes from './routes/reportRoutes.js';
 import jobApplicationRoutes from './routes/jobApplicationRoutes.js';
 import helmet from 'helmet';
 import { rateLimit } from 'express-rate-limit';
+import { validateEnv } from './utils/validateEnv.js';
+import { apiLimiter, authLimiter, otpLimiter } from './middlewares/ratelimiter.js';
+import { registerValidation, loginValidation, otpValidation } from './middlewares/validationMiddleware.js';
+import healthRoutes from './routes/healthRoutes.js';
+import cookieParser from 'cookie-parser';
+import './jobs/cleanupChats.js';
 
 // Connect to MongoDB
 connectDB()
+validateEnv()
 
 const app = express()
 const server = createServer(app)
@@ -103,6 +110,8 @@ app.use(cors({
   optionsSuccessStatus: 204 // Some legacy browsers choke on 204
 }));
 
+app.use(cookieParser());
+
 // Additional CORS and security middleware
 app.use(credentialsMiddleware);
 app.use(preflightHandler);
@@ -161,6 +170,8 @@ app.use('/uploads', express.static('uploads'))
 // Global error handler - must be after all routes
 app.use(errorHandler);
 
+app.use('/api', healthRoutes);
+
 // Health check endpoint
 app.get('/api/health', (req, res) => {
   res.json({ 
@@ -201,6 +212,11 @@ app.options('/api/cors-test', (req, res) => {
   console.log(`🧪 CORS Test Preflight from: ${origin}`);
   res.status(204).end();
 });
+
+app.use('/api/auth/login', authLimiter);
+app.use('/api/auth/register', authLimiter);
+app.use('/api/auth/send-otp', otpLimiter);
+app.use(apiLimiter);
 
 // API Routes - Mount more specific routes BEFORE general ones
 app.use('/api/auth', authRoutes);

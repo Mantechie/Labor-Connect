@@ -74,5 +74,8 @@ class MemoryCache {
   }
 }
 
+// Export the MemoryCache class
+export { MemoryCache };
+
 // Create and export a singleton instance
 export const adminLogCache = new MemoryCache(300); // 5 minutes TTL

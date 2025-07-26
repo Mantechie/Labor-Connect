@@ -8,21 +8,35 @@ import {
 } from '../controllers/chatController.js'
 
 import { protect } from '../middlewares/authMiddleware.js'
+import { chatLimiter } from '../middlewares/ratelimiter.js';
+import { 
+  validateSendMessage,
+  validateGetMessagesBetweenUsers,
+  validateGetUserChatHistory,
+  validateMarkMessagesAsRead,
+  validateDeleteMessage
+} from '../middlewares/chatValidation.js';
+import { isChatParticipant } from '../middlewares/chatMiddleware.js';
 
 const router = express.Router()
 
-// 📌 POST /api/chats - Start new conversation between user & laborer
-router.post('/', protect, sendMessage)
+// Apply rate limiting to all chat routes
+router.use(chatLimiter);
 
-// 📌 GET /api/chats - Get messages between specific users
-router.get('/messages', protect, getMessagesBetweenUsers)
+// Send message
+router.post('/', protect, validateSendMessage, sendMessage);
 
-// 📌 GET /api/chats - Get all chats of logged-in user/laborer
-router.get('/', protect, getUserChatHistory)
+// Get messages between users
+router.get('/:user1/:user2', protect, validateGetMessagesBetweenUsers, getMessagesBetweenUsers);
 
-router.put('/read/:senderId', protect, markMessagesAsRead)
+// Get user chat history
+router.get('/user/:userId', protect, validateGetUserChatHistory, getUserChatHistory);
 
-router.delete('/:chatId', protect, deleteMessage)
+// Mark messages as read
+router.put('/read/:senderId', protect, validateMarkMessagesAsRead, markMessagesAsRead);
+
+// Delete message
+router.delete('/:chatId', protect, validateDeleteMessage, isChatParticipant, deleteMessage);
 
 export default router
 

@@ -5,6 +5,11 @@ import Chat from '../models/chat.js' // Chat Model
 export const sendMessage = async (req, res) => {
   try {
     const { sender, receiver, message, media } = req.body
+    
+     // Ensure sender matches authenticated user
+    if (sender !== req.user.id) {
+      return res.status(403).json({ message: 'Sender ID must match authenticated user' });
+    }
 
     const newChat = new Chat({
       sender, // User ID of sender
@@ -28,7 +33,24 @@ export const sendMessage = async (req, res) => {
 export const getMessagesBetweenUsers = async (req, res) => {
   try {
     const { user1, user2 } = req.params
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    // Ensure user is authorized to view these messages
+    if (user1 !== req.user.id && user2 !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized to view these messages' });
+    }
     
+      // Count total messages
+    const total = await Chat.countDocuments({
+      isDeleted: false,
+      $or: [
+        { sender: user1, receiver: user2 },
+        { sender: user2, receiver: user1 },
+      ],
+    });
+
     // Finds messages
     const messages = await Chat.find({
       isDeleted: false,
@@ -37,9 +59,19 @@ export const getMessagesBetweenUsers = async (req, res) => {
         { sender: user1, receiver: user2 },
         { sender: user2, receiver: user1 },
       ],
-    }).sort({ createdAt: 1 }) // Oldest first
+    })
+    .sort({ createdAt: 1 })
+    .skip(skip)
+    .limit(limit);
 
-    res.status(200).json(messages)
+    res.status(200).json({
+      messages,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit)
+      }
+    });
   } catch (err) {
     res.status(500).json({ message: 'Failed to get chat history', error: err.message })
   }
@@ -50,16 +82,41 @@ export const getMessagesBetweenUsers = async (req, res) => {
 export const getUserChatHistory = async (req, res) => {
   try {
     const userId = req.params.userId
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 50;
+    const skip = (page - 1) * limit;
+
+    // Ensure user is authorized to view these messages
+    if (userId !== req.user.id && req.user.role !== 'admin') {
+      return res.status(403).json({ message: 'Not authorized to view these messages' });
+    }
+
+    const total = await Chat.countDocuments({
+      isDeleted: false,
+      $or: [{ sender: userId }, { receiver: userId }],
+    });
 
     const chats = await Chat.find({
+      isDeleted: false,
       $or: [{ sender: userId }, { receiver: userId }],
-    }).sort({ createdAt: -1 })
+    })
+    .sort({ createdAt: -1 })
+    .skip(skip)  // Add the missing dot here
+    .limit(limit);
 
-    res.status(200).json(chats)
+    res.status(200).json({
+      chats,
+      pagination: {
+        total,
+        page,
+        pages: Math.ceil(total / limit)
+      }
+    });
   } catch (err) {
     res.status(500).json({ message: 'Error fetching user chats', error: err.message })
   }
 }
+
 
 // @desc Mark messages from a specific user as read
 // @route PUT /api/chats/read/:senderId

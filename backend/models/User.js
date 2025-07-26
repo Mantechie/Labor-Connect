@@ -26,6 +26,14 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: Date.now
     },
+    loginAttempts: {
+      type: Number,
+      default: 0
+    },
+    lockUntil: {
+      type: Date,
+      default: null
+    },
     phone: {
       type: String,
       required: false, // Make phone optional for now

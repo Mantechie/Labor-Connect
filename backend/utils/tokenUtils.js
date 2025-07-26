@@ -1,5 +1,3 @@
-// File: h:\Labour\backend\utils\tokenUtils.js
-
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { isTokenBlacklisted } from './tokenBlacklist.js';
@@ -27,7 +25,7 @@ export const generateAccessToken = (id, role, options = {}) => {
   };
 
   // Get token expiration from environment or use default
-  const expiresIn = process.env.JWT_ACCESS_EXPIRY || '30d';
+  const expiresIn = process.env.JWT_ACCESS_EXPIRY || '15m';
 
   // Sign token with JWT_SECRET
   return jwt.sign(

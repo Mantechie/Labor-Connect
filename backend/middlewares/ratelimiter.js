@@ -1,4 +1,4 @@
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 
 // General API rate limiter
 export const apiLimiter = rateLimit({
@@ -33,5 +33,26 @@ export const otpLimiter = rateLimit({
   message: {
     status: 'error',
     message: 'Too many OTP requests, please try again after 10 minutes'
+  }
+});
+
+// Chat rate limiter
+export const chatLimiter = rateLimit({
+  windowMs: 1 * 60 * 1000, // 1 minute
+  max: 20, // limit each user to 20 messages per minute
+  standardHeaders: true,
+  legacyHeaders: false,
+  keyGenerator: (req) => {
+    // If user is authenticated, use their ID
+    if (req.user && req.user.id) {
+      return `user_\${req.user.id}`;
+    }
+    // Otherwise use IP address with IPv6 safe key generator
+    return ipKeyGenerator(req);
+  },
+  // Rate limit by user ID if authenticated, IP otherwise
+  message: {
+    status: 'error',
+    message: 'Too many messages sent, please slow down'
   }
 });

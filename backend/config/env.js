@@ -1,30 +1,33 @@
-import dotenv from 'dotenv'
+/**
+ * Environment variables configuration for email service and other settings.
+ * Please set the following environment variables in your deployment environment:
+ * 
+ * EMAIL_SERVICE: Gmail
+ * EMAIL_USER: your-gmail-email@example.com
+ * EMAIL_PASS: your-gmail-app-password
+ * EMAIL_FROM: "Your App Name <your-gmail-email@example.com>"
+ * 
+ * Note: For Gmail, it is recommended to use an App Password instead of your main password.
+ */
 
-// Load environment variables
-dotenv.config()
+import dotenv from 'dotenv';
+dotenv.config();
 
-// Environment configuration with defaults
+// Create a config object to hold all environment variables
 const config = {
-  // Server Configuration
-  PORT: process.env.PORT || 8080,
-  NODE_ENV: process.env.NODE_ENV || 'development',
-  
-  // MongoDB Configuration
-  MONGO_URI: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/yourDB',
-  
-  // JWT Configuration
-  JWT_SECRET: process.env.JWT_SECRET || 'labor-connect-default-secret-key-change-in-production',
-  JWT_EXPIRE: process.env.JWT_EXPIRE || '7d',
 
-  JWT_ACCESS_SECRET: process.env.JWT_ACCESS_SECRET || 'labor-connect-access-secret-key-change-in-production',
-  JWT_REFRESH_SECRET: process.env.JWT_REFRESH_SECRET || 'labor-connect-refresh-secret-key-change-in-production',
-  
+  MONGO_URI: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/labor-connect',
+
   // Email Configuration
+  EMAIL_SERVICE: process.env.EMAIL_SERVICE || 'gmail',
   EMAIL_HOST: process.env.EMAIL_HOST || 'smtp.gmail.com',
   EMAIL_PORT: process.env.EMAIL_PORT || 587,
   EMAIL_USER: process.env.EMAIL_USER || '',
   EMAIL_PASS: process.env.EMAIL_PASS || '',
   EMAIL_FROM: process.env.EMAIL_FROM || 'noreply@laborconnect.com',
+  
+  // JWT Configuration
+  JWT_SECRET: process.env.JWT_SECRET || 'devjwtsecret',
   
   // Twilio Configuration (SMS)
   TWILIO_ACCOUNT_SID: process.env.TWILIO_ACCOUNT_SID || '',
@@ -47,19 +50,47 @@ const config = {
   // Payment Configuration (for future use)
   STRIPE_SECRET_KEY: process.env.STRIPE_SECRET_KEY || '',
   STRIPE_PUBLISHABLE_KEY: process.env.STRIPE_PUBLISHABLE_KEY || '',
+};
+
+// Check for missing email configuration
+if (!config.EMAIL_USER || !config.EMAIL_PASS || !config.EMAIL_FROM) {
+  console.warn('Warning: Email environment variables are not fully set. Email sending may fail.');
 }
 
 // Validate required environment variables
 const validateConfig = () => {
-  const required = ['JWT_SECRET']
-  const missing = required.filter(key => !config[key])
+  const required = ['JWT_SECRET'];
+  const missing = required.filter(key => !config[key]);
   
   if (missing.length > 0) {
-    console.warn(`⚠️  Missing required environment variables: ${missing.join(', ')}`)
-    console.warn('Using default values for development. Set these in production.')
+    console.warn(`⚠️  Missing required environment variables: ${missing.join(', ')}`);
+    console.warn('Using default values for development. Set these in production.');
   }
   
-  return config
-}
+  return config;
+};
 
-export default validateConfig() 
+// Export individual config values for backward compatibility
+export const {
+  EMAIL_SERVICE,
+  EMAIL_HOST,
+  EMAIL_PORT,
+  EMAIL_USER,
+  EMAIL_PASS,
+  EMAIL_FROM,
+  MONGO_URI,
+  JWT_SECRET,
+  TWILIO_ACCOUNT_SID,
+  TWILIO_AUTH_TOKEN,
+  TWILIO_PHONE_NUMBER,
+  UPLOAD_PATH,
+  MAX_FILE_SIZE,
+  CORS_ORIGIN,
+  CORS_CREDENTIALS,
+  CORS_MAX_AGE,
+  REDIS_URL,
+  STRIPE_SECRET_KEY,
+  STRIPE_PUBLISHABLE_KEY
+} = config;
+
+export default validateConfig();
