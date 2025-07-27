@@ -1,4 +1,5 @@
 import axios from 'axios'
+import authService from '../services/authService';
 
 // Create axios instance with comprehensive CORS configuration
 const axiosInstance = axios.create({
@@ -36,16 +37,16 @@ const processQueue = (error, token = null) => {
   failedQueue = [];
 };
 
-// Request interceptor to add auth token and debug info
+// Request interceptor to add CSRF token and debug info
 axiosInstance.interceptors.request.use(
   (config) => {
     // Add request ID for debugging
     config.metadata = { requestId: ++requestId, startTime: Date.now() };
     
-    // Add auth token
-    const token = localStorage.getItem('token');
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    // Add CSRF token if available (for CSRF protection)
+    const csrfToken = document.querySelector('meta[name="csrf-token"]')?.getAttribute('content');
+    if (csrfToken) {
+      config.headers['X-CSRF-Token'] = csrfToken;
     }
     
     // Add additional headers for CORS compatibility
@@ -116,14 +117,15 @@ axiosInstance.interceptors.response.use(
         userMessage: 'Unable to connect to server. Please try again later.'
       });
     }
+    
     const originalRequest = error.config;
 
+    // Handle 401 Unauthorized errors (expired token)
     if (error.response?.status === 401 && !originalRequest._retry) {
       if (isRefreshing) {
         return new Promise(function(resolve, reject) {
           failedQueue.push({ resolve, reject });
-        }).then(token => {
-          originalRequest.headers['Authorization'] = 'Bearer ' + token;
+        }).then(() => {
           return axiosInstance(originalRequest);
         }).catch(err => {
           return Promise.reject(err);
@@ -133,43 +135,19 @@ axiosInstance.interceptors.response.use(
       originalRequest._retry = true;
       isRefreshing = true;
 
-      const refreshToken = localStorage.getItem('refreshToken');
-      
-      if (!refreshToken) {
-        // No refresh token, logout user
-        localStorage.removeItem('token');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
-        window.location.href = '/login';
-        return Promise.reject(error);
-      }
-
       try {
-        const response = await axios.post(
-          `${import.meta.env.VITE_API_BASE_URL}/auth/refresh`,
-          { refreshToken }
-        );
-
-        const { token: newToken, refreshToken: newRefreshToken, user } = response.data;
-        
-        // Update tokens in localStorage
-        localStorage.setItem('token', newToken);
-        localStorage.setItem('refreshToken', newRefreshToken);
-        localStorage.setItem('user', JSON.stringify(user));
-        
-        // Update Authorization header
-        originalRequest.headers['Authorization'] = 'Bearer ' + newToken;
+        // Use the authService to refresh the token
+        await authService.refreshToken();
         
         // Process queued requests
-        processQueue(null, newToken);
+        processQueue(null);
         
+        // Retry the original request
         return axiosInstance(originalRequest);
       } catch (refreshError) {
         // Refresh token failed, logout user
-        processQueue(refreshError, null);
-        localStorage.removeItem('token');
-        localStorage.removeItem('refreshToken');
-        localStorage.removeItem('user');
+        processQueue(refreshError);
+        await authService.logout();
         window.location.href = '/login';
         return Promise.reject(refreshError);
       } finally {

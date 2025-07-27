@@ -2,50 +2,51 @@ import jwt from 'jsonwebtoken'
 import User from '../models/User.js'
 import asyncHandler from 'express-async-handler'
 import { verifyAccessToken } from '../utils/tokenUtils.js'
+import { isTokenBlacklisted } from '../utils/tokenBlacklist.js';
 
-// 🔐 Protect routes
-export const protect = asyncHandler(async (req, res, next) => {
-  let token
-
-  if (
-    req.headers.authorization &&
-    req.headers.authorization.startsWith('Bearer')
-  ) {
-    try {
-      token = req.headers.authorization.split(' ')[1]
-
-      const decoded = verifyAccessToken(token)
-
-      req.user = await User.findById(decoded.id).select('-password -refreshToken')
-
-      if (!req.user) {
-        res.status(401)
-        throw new Error('User not found')
-      }
-
-      // Check if user is active
-      if (!req.user.isActive || req.user.status !== 'active') {
-        res.status(403)
-        throw new Error('Account is inactive or suspended')
-      }
-
-      // Add token metadata to request for logging/tracking
-      req.tokenMetadata = decoded.metadata || {}
-
-
-      next()
-    } catch (error) {
-      console.error('Authentication error:', error.message)
-      res.status(error.statusCode || 401)
-      throw new Error(error.message || 'Not authorized, token failed')
+export const protect = async (req, res, next) => {
+  try {
+    // Get token from cookie instead of Authorization header
+    const token = req.cookies.access_token;
+    
+    if (!token) {
+      return res.status(401).json({ message: 'Not authorized, no token' });
     }
+    
+    // Check if token is blacklisted
+    if (isTokenBlacklisted(token)) {
+      return res.status(401).json({ message: 'Token has been invalidated' });
+    }
+    
+    // Verify token
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    
+    // Get user from the token
+    const user = await User.findById(decoded.userId).select('-password');
+    
+    if (!user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+    
+    // Check if user is active
+    if (!user.isActive) {
+      return res.status(401).json({ message: 'Account is deactivated' });
+    }
+    
+    // Add user to request object
+    req.user = user;
+    next();
+  } catch (error) {
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ message: 'Invalid token' });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ message: 'Token expired' });
+    }
+    console.error('Auth middleware error:', error);
+    res.status(401).json({ message: 'Not authorized' });
   }
-
-  if (!token) {
-    res.status(401)
-    throw new Error('Not authorized, no token')
-  }
-})
+}
 
 // 🛡 Admin-only access
 export const isAdmin = (req, res, next) => {

@@ -17,7 +17,15 @@ import reviewRoutes from './routes/reviewRoutes.js'
 import chatRoutes from './routes/chatRoutes.js'
 import categoryRoutes from './routes/categoryRoutes.js';
 import { notFound, errorHandler } from './middlewares/errorMiddleware.js'
-import { corsDebugMiddleware, credentialsMiddleware, preflightHandler, validateCorsOrigin, corsErrorHandler, dynamicCorsOrigin } from './middlewares/corsMiddleware.js'
+import { 
+    corsDebugMiddleware, 
+    credentialsMiddleware, 
+    preflightHandler, 
+    validateCorsOrigin, 
+    corsErrorHandler, 
+    dynamicCorsOrigin,
+    corsMonitoringMiddleware
+  } from './middlewares/corsMiddleware.js'
 import path from 'path'
 import { fileURLToPath } from 'url'
 import reportRoutes from './routes/reportRoutes.js';
@@ -66,6 +74,7 @@ app.use(preflightHandler);
 
 // Dynamic CORS origin setter
 app.use(dynamicCorsOrigin);
+app.use(corsMonitoringMiddleware);
 
 // Main CORS Configuration with enhanced validation
 app.use(cors({
@@ -94,6 +103,7 @@ app.use(cors({
     'X-HTTP-Method-Override',
     'X-Forwarded-For',
     'X-Real-IP',
+    'X-CSRF-Token', 
     'User-Agent',
     'Referer',
     'Accept-Language',

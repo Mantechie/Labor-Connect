@@ -1,3 +1,4 @@
+import crypto from 'crypto'
 import bcrypt from 'bcryptjs' // PAssword hashing library
 import jwt from 'jsonwebtoken' // Generating JWT tokens
 import User from '../models/User.js' // User model
@@ -76,6 +77,9 @@ export const register = async (req, res, next) => {
     const token = generateAccessToken(newUser._id, newUser.role, { ip, userAgent });
     const refreshToken = generateRefreshToken(newUser._id, { ip, userAgent, deviceId });
     
+    // Generate CSRF token
+    const csrfToken = crypto.randomBytes(20).toString('hex');
+
     // Store refresh token in user document
     newUser.refreshToken = refreshToken;
     
@@ -86,15 +90,35 @@ export const register = async (req, res, next) => {
     authLogger.register(newUser._id, email, true, ip, userAgent, {
       role: newUser.role
     });
+
+    // Set access token as HTTP-only cookie
+    res.cookie('access_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/'
+    });
+    
     
     // Set refresh token as HTTP-only cookie
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 60 * 24 * 60 * 60 * 1000, // 60 days
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       path: '/api/auth/refresh'
     });
+
+    // Set CSRF token as a regular cookie (accessible to JavaScript)
+    res.cookie('csrf_token', csrfToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/'
+    });
+
     // Respond with user data + tokens (exclude sensitive data)
     res.status(201).json({
       message: 'Registration successful',
@@ -104,9 +128,8 @@ export const register = async (req, res, next) => {
         email: newUser.email,
         role: newUser.role,
         phone: newUser.phone,
-        token: token,
-        refreshToken: refreshToken,
       },
+      csrfToken: csrfToken
     });
   } catch (err) {
     console.error('Registration error:', err.message);
@@ -195,6 +218,10 @@ export const login = async (req, res) => {
     const token = generateAccessToken(user._id, user.role, { ip, userAgent });
     const refreshToken = generateRefreshToken(user._id, { ip, userAgent, deviceId });
     
+    // Generate CSRF token
+    const csrfToken = crypto.randomBytes(20).toString('hex');
+
+
     // Store refresh token in user document
     user.refreshToken = refreshToken;
      user.lastLogin = new Date()
@@ -210,16 +237,34 @@ export const login = async (req, res) => {
 
     // Log successful login
     authLogger.login(user._id, email, true, ip, userAgent);
-    
+
+    // Set access token as HTTP-only cookie
+    res.cookie('access_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/'
+    });
     
     // Set refresh token as HTTP-only cookie
     res.cookie('refreshToken', refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production', // HTTPS only in production
       sameSite: 'strict',
-      maxAge: 60 * 24 * 60 * 60 * 1000, // 60 days in milliseconds
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
       path: '/api/auth/refresh' // Restrict to refresh endpoint
     });
+
+    // Set CSRF token as a regular cookie (accessible to JavaScript)
+    res.cookie('csrf_token', csrfToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/'
+    });
+    
     // Respond with user data + tokens
     // Return token immediately after login
     res.status(200).json({
@@ -230,9 +275,8 @@ export const login = async (req, res) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
-        token: token,
-        refreshToken: refreshToken,
       },
+      csrfToken: csrfToken
     })
   } catch (err) {
     console.error('Login error:', err.message);
@@ -420,9 +464,13 @@ export const verifyOtp = async (req, res) => {
     const userAgent = req.headers['user-agent']
     const deviceId = req.headers['x-device-id'] || 'unknown'
 
-    // Generate JWT token and return user data
-    const token = generateAccessToken(user._id, user.role, { ip, userAgent })
-    const refreshToken = generateRefreshToken(user._id, { ip, userAgent, deviceId })
+    // Generate tokens
+    const token = generateAccessToken(user._id, user.role, { ip, userAgent });
+    const refreshToken = generateRefreshToken(user._id, { ip, userAgent, deviceId });
+    
+    
+    // Generate CSRF token
+    const csrfToken = crypto.randomBytes(20).toString('hex');
     
     // Update user login information
     user.refreshToken = refreshToken
@@ -434,11 +482,38 @@ export const verifyOtp = async (req, res) => {
       ipAddress: ip,
       userAgent: userAgent
     })
-
+    
     await user.save()
 
      // Log successful OTP verification
     console.log(`✅ User logged in via OTP: ${email || phone} (${user._id})`)
+    
+    // Set access token as HTTP-only cookie
+    res.cookie('access_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/'
+    });
+    
+    // Set refresh token as HTTP-only cookie
+    res.cookie('refreshToken', refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+      path: '/api/auth/refresh'
+    });
+    
+    // Set CSRF token as a regular cookie
+    res.cookie('csrf_token', csrfToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/'
+    });
     
     res.status(200).json({
       message: 'OTP verified successfully',
@@ -448,8 +523,8 @@ export const verifyOtp = async (req, res) => {
         email: user.email,
         role: user.role,
         phone: user.phone,
-        token: token,
       },
+      csrfToken: csrfToken // Include CSRF token in response
     })
   } catch (error) {
     console.error('Verify OTP error:', error)
@@ -461,120 +536,106 @@ export const verifyOtp = async (req, res) => {
 // @route   POST /api/auth/refresh
 export const refreshToken = async (req, res) => {
   try {
-    // Get refresh token from cookies
-    const requestToken = req.cookies.refreshToken;
+    // Get refresh token from cookie
+    const refreshToken = req.cookies.refresh_token;
     
-    if (!requestToken) {
-      return res.status(400).json({ message: 'Refresh token is required' });
+    if (!refreshToken) {
+      return res.status(401).json({ message: 'Refresh token not found' });
     }
     
     // Verify refresh token
-    const decoded = jwt.verify(requestToken, process.env.JWT_SECRET);
+    const decoded = verifyRefreshToken(refreshToken);
     
-    // Find user with this refresh token
-    const user = await User.findById(decoded.id);
-    if (!user || user.refreshToken !== requestToken) {
+    // Find user by ID
+    const user = await User.findById(decoded.userId);
+    
+    if (!user) {
+      return res.status(401).json({ message: 'User not found' });
+    }
+    
+    // Check if refresh token matches stored token
+    if (user.refreshToken !== refreshToken) {
       return res.status(401).json({ message: 'Invalid refresh token' });
     }
-      
-    // Check if account is active
-    if (!user.isActive || user.status !== 'active') {
-      return res.status(403).json({ message: 'Account is inactive or suspended' });
-    }
-      
-    // Get client info for token metadata
-    const ip = req.ip || req.connection.remoteAddress
-    const userAgent = req.headers['user-agent']
-    const deviceId = req.headers['x-device-id'] || decoded.metadata?.deviceId || 'unknown'
     
     // Generate new tokens
-    const newToken = generateToken(user._id, user.role, { ip, userAgent });
+    const ip = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+    const deviceId = req.headers['x-device-id'] || 'unknown';
+    
+    const newAccessToken = generateAccessToken(user._id, user.role, { ip, userAgent });
     const newRefreshToken = generateRefreshToken(user._id, { ip, userAgent, deviceId });
+    
+    // Generate new CSRF token
+    const csrfToken = crypto.randomBytes(20).toString('hex');
     
     // Update refresh token in database
     user.refreshToken = newRefreshToken;
-    user.activityLogs.push({
-        action: 'token_refresh',
-        details: 'User refreshed authentication token',
-        ipAddress: ip,
-        userAgent: userAgent
-    });
     await user.save();
-
-    // Log token refresh
-    console.log(`✅ Token refreshed for user: ${user.email} (${user._id})`)
     
-     // When sending the response, set the new refresh token as a cookie
-    res.cookie('refreshToken', newRefreshToken, {
+    // Set new access token as HTTP-only cookie
+    res.cookie('access_token', newAccessToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'strict',
-      maxAge: 60 * 24 * 60 * 60 * 1000, // 60 days
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/'
+    });
+    
+    // Set new refresh token as HTTP-only cookie
+    res.cookie('refresh_token', newRefreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
       path: '/api/auth/refresh'
     });
-
-    res.json({
-      token: newToken,
-      refreshToken: newRefreshToken,
-      user: {
-        id: user._id,
-        name: user.name,
-        email: user.email,
-        role: user.role,
-        phone: user.phone,
-      }
+    
+    // Set new CSRF token as a regular cookie
+    res.cookie('csrf_token', csrfToken, {
+      httpOnly: false,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'strict',
+      maxAge: 15 * 60 * 1000, // 15 minutes
+      path: '/'
+    });
+    
+    // Return success response with new CSRF token
+    res.status(200).json({
+      message: 'Token refreshed successfully',
+      csrfToken: csrfToken
     });
   } catch (error) {
-    console.error('Refresh token error:', error);
-    if (error.name === 'JsonWebTokenError') {
-      return res.status(401).json({ message: 'Invalid refresh token' });
-    }
-    res.status(500).json({ message: 'Failed to refresh token. Please login again.' });
-  } 
+    console.error('Token refresh error:', error);
+    res.status(401).json({ message: 'Invalid or expired refresh token' });
+  }
 };
 
 // @desc    Logout user (invalidate refresh token)
 // @route   POST /api/auth/logout
 export const logout = async (req, res) => {
   try {
-    const userId = req.user.id;
-
-    // Get client info for logging
-    const ip = req.ip || req.connection.remoteAddress
-    const userAgent = req.headers['user-agent']
+    // Get refresh token from cookie
+    const refreshToken = req.cookies.refresh_token;
     
+    if (refreshToken) {
+      // Blacklist the refresh token
+      blacklistToken(refreshToken);
+      
+      // Find user by refresh token and update
+      const user = await User.findOne({ refreshToken });
+      if (user) {
+        user.refreshToken = null;
+        await user.save();
+      }
+    }
     
-    /// Find user and update
-    const user = await User.findById(userId);
-    if (user && user.refreshToken) {
-      // Add to token blacklist if implementing that feature
-      await blacklistToken(user.refreshToken, userId, {
-        type: 'refresh',
-        reason: 'logout'
-      });
-      
-      // Clear refresh token from user document
-      user.refreshToken = null;
-      user.activityLogs.push({
-        action: 'logout',
-        details: 'User logged out',
-        ipAddress: ip,
-        userAgent: userAgent
-      });
-      
-      await user.save();
-      // Log logout
-       // Log logout
-      authLogger.logout(user._id, user.email, ip, userAgent);
-
-      console.log(`✅ User logged out: ${user.email} (${user._id})`)
-    } 
-    // Clear the refresh token cookie
-    res.clearCookie('refreshToken', {
-      path: '/api/auth/refresh'
-    });
-
-    res.json({ message: 'Logged out successfully' });
+    // Clear all cookies
+    res.clearCookie('access_token', { path: '/' });
+    res.clearCookie('refresh_token', { path: '/api/auth/refresh' });
+    res.clearCookie('csrf_token', { path: '/' });
+    
+    res.status(200).json({ message: 'Logged out successfully' });
   } catch (error) {
     console.error('Logout error:', error);
     res.status(500).json({ message: 'Logout failed. Please try again.' });
@@ -584,6 +645,143 @@ export const logout = async (req, res) => {
 // @desc    Get current user
 // @route   GET /api/auth/me
 // @access  Private
+// @desc    Reset user password with OTP verification
+// @route   POST /api/auth/reset-password
+export const updateProfile = async (req, res) => {
+  try {
+    const { name, phone } = req.body;
+    const userId = req.user.id;
+    const ip = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    // Validate input
+    if (!name && !phone) {
+      return res.status(400).json({ message: 'At least one field (name or phone) is required' });
+    }
+
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Update fields if provided
+    if (name) user.name = name;
+    if (phone) user.phone = phone;
+
+    // Log activity
+    user.activityLogs.push({
+      action: 'update_profile',
+      details: 'User updated profile',
+      ipAddress: ip,
+      userAgent: userAgent
+    });
+
+    await user.save();
+
+    // Log successful update
+    authLogger.updateProfile(user._id, user.email, true, ip, userAgent);
+
+    res.status(200).json({
+      message: 'Profile updated successfully',
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        phone: user.phone
+      }
+    });
+  } catch (error) {
+    console.error('Profile update error:', error);
+    
+    // Log error
+    authLogger.updateProfile(req.user?.id, req.user?.email, false, 
+      req.ip || req.connection.remoteAddress, 
+      req.headers['user-agent'], {
+        error: error.message
+      }
+    );
+    
+    res.status(500).json({ message: 'Profile update failed. Please try again.' });
+  }
+};
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { email, otp, newPassword } = req.body;
+    const ip = req.ip || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    // Validate required fields
+    if (!email || !otp || !newPassword) {
+      return res.status(400).json({ message: 'Email, OTP and new password are required' });
+    }
+
+    // Find OTP record
+    const otpRecord = await OTP.findOne({ email, otpCode: otp });
+    if (!otpRecord) {
+      return res.status(400).json({ message: 'Invalid OTP' });
+    }
+
+    // Check if OTP is expired
+    if (otpRecord.expiresAt < new Date()) {
+      await OTP.deleteMany({ email });
+      return res.status(400).json({ message: 'OTP has expired. Please request a new one.' });
+    }
+
+    // Find user
+    const user = await User.findOne({ email });
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    // Validate password strength
+    const passwordValidation = validatePasswordStrength(newPassword);
+    if (!passwordValidation.success) {
+      return res.status(400).json({ message: passwordValidation.message });
+    }
+
+    // Hash new password
+    const salt = await bcrypt.genSalt(process.env.NODE_ENV === 'production' ? 12 : 10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+
+    // Update user password
+    user.password = hashedPassword;
+    user.activityLogs.push({
+      action: 'password_reset',
+      details: 'Password reset via OTP',
+      ipAddress: ip,
+      userAgent: userAgent
+    });
+
+    // Mark OTP as used and delete
+    otpRecord.isUsed = true;
+    await Promise.all([
+      user.save(),
+      otpRecord.save(),
+      OTP.deleteMany({ email })
+    ]);
+
+    // Log successful password reset
+    authLogger.passwordReset(user._id, email, true, ip, userAgent);
+
+    res.status(200).json({ message: 'Password reset successful' });
+  } catch (error) {
+    console.error('Password reset error:', error);
+    
+    // Log failed password reset attempt
+    authLogger.passwordReset(null, req.body.email, false, 
+      req.ip || req.connection.remoteAddress, 
+      req.headers['user-agent'], {
+        error: error.message
+      }
+    );
+    
+    res.status(500).json({ message: 'Password reset failed. Please try again.' });
+  }
+};
+
 export const getCurrentUser = async (req, res) => {
   try {
     const user = await User.findById(req.user.id).select('-password -refreshToken');
@@ -607,5 +805,44 @@ export const getCurrentUser = async (req, res) => {
   } catch (error) {
     console.error('Get current user error:', error);
     res.status(500).json({ message: 'Failed to retrieve user information' });
+  }
+};
+
+// @desc    Change user password
+// @route   POST /api/auth/change-password
+// @access  Private
+export const changePassword = async (req, res) => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    const user = await User.findById(req.user.id);
+    
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    
+    // Verify current password
+    const isMatch = await bcrypt.compare(currentPassword, user.password);
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Current password is incorrect' });
+    }
+    
+    // Validate new password strength
+    const passwordValidation = validatePasswordStrength(newPassword);
+    if (!passwordValidation.success) {
+      return res.status(400).json({ message: passwordValidation.message });
+    }
+    
+    // Hash new password
+    const salt = await bcrypt.genSalt(10);
+    const hashedPassword = await bcrypt.hash(newPassword, salt);
+    
+    // Update password
+    user.password = hashedPassword;
+    await user.save();
+    
+    res.status(200).json({ message: 'Password changed successfully' });
+  } catch (error) {
+    console.error('Change password error:', error);
+    res.status(500).json({ message: 'Failed to change password' });
   }
 };

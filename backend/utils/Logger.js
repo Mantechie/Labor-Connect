@@ -164,6 +164,18 @@ const authLogger = {
     });
   },
   
+  passwordReset(userId, email, success, ip, userAgent, details = {}) {
+  this.log({
+    action: 'password-reset',
+    userId,
+    email,
+    success,
+    ip,
+    userAgent,
+    details
+  });
+},
+
   passwordChange: (userId, email, success, ip, userAgent, details = {}) => {
     logger.info(`AUTH_PASSWORD_CHANGE | User: ${email} (${userId}) | Success: ${success}`, {
       event: 'password_change',
@@ -176,6 +188,17 @@ const authLogger = {
     });
   },
   
+  updateProfile(userId, email, success, ip, userAgent, details = {}) {
+  this.log({
+    action: 'update-profile',
+    userId,
+    email,
+    success,
+    ip,
+    userAgent,
+    details
+    });
+  },
   securityEvent: (userId, email, eventType, ip, userAgent, details = {}) => {
     logger.warn(`AUTH_SECURITY_EVENT | User: ${email} (${userId}) | Event: ${eventType}`, {
       event: 'security_event',
@@ -189,4 +212,60 @@ const authLogger = {
   }
 };
 
-export { logger, authLogger };
+// CORS-specific logger functions
+const corsLogger = {
+  request: (origin, path, method, ip, userAgent, success = true, details = {}) => {
+    logger.http(`CORS_REQUEST | Origin: ${origin || 'no-origin'} | Path: ${path} | Method: ${method}`, {
+      event: 'cors_request',
+      origin,
+      path,
+      method,
+      ip,
+      userAgent,
+      success,
+      ...details
+    });
+  },
+  
+  preflight: (origin, path, method, ip, userAgent, success = true, details = {}) => {
+    logger.http(`CORS_PREFLIGHT | Origin: ${origin || 'no-origin'} | Path: ${path} | Method: ${method}`, {
+      event: 'cors_preflight',
+      origin,
+      path,
+      method,
+      ip,
+      userAgent,
+      success,
+      ...details
+    });
+  },
+  
+  error: (origin, path, method, ip, userAgent, errorMessage, details = {}) => {
+    logger.error(`CORS_ERROR | Origin: ${origin || 'no-origin'} | Path: ${path} | Error: ${errorMessage}`, {
+      event: 'cors_error',
+      origin,
+      path,
+      method,
+      ip,
+      userAgent,
+      error: errorMessage,
+      ...details
+    });
+  },
+  
+  metrics: (origin, path, method, statusCode, responseTime, details = {}) => {
+    logger.http(`CORS_METRICS | Origin: ${origin || 'no-origin'} | Status: ${statusCode} | Time: ${responseTime}ms`, {
+      event: 'cors_metrics',
+      origin,
+      path,
+      method,
+      statusCode,
+      responseTime,
+      timestamp: new Date().toISOString(),
+      ...details
+    });
+  }
+};
+
+export { logger, authLogger, corsLogger };
+

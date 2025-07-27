@@ -1,6 +1,9 @@
 import jwt from 'jsonwebtoken';
 import crypto from 'crypto';
 import { isTokenBlacklisted } from './tokenBlacklist.js';
+import dotenv from 'dotenv';
+
+dotenv.config();
 
 /**
  * Generates an access token for a user
@@ -14,11 +17,13 @@ import { isTokenBlacklisted } from './tokenBlacklist.js';
 export const generateAccessToken = (id, role, options = {}) => {
   // Create payload with essential user data and metadata
   const payload = {
-    id,
+    userId: id,
     role,
+    type: 'refresh',
     // Add token metadata for security tracking
     metadata: {
       createdAt: Date.now(),
+      ...(options.deviceId && { deviceId: options.deviceId }),
       ...(options.ip && { ip: options.ip }),
       ...(options.userAgent && { userAgent: options.userAgent }),
     }
@@ -47,7 +52,8 @@ export const generateAccessToken = (id, role, options = {}) => {
 export const generateRefreshToken = (id, options = {}) => {
   // Create payload with user ID and device info for multi-device support
   const payload = {
-    id,
+    userId: id,
+    type: 'refresh',
     // Add token metadata for security tracking
     metadata: {
       createdAt: Date.now(),

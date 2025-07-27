@@ -15,15 +15,14 @@ export const AuthProvider = ({ children }) => {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Check authentication status on app start and token changes
+  // Check authentication status on app start
   useEffect(() => {
     const checkAuthStatus = async () => {
       try {
-        const token = localStorage.getItem('token');
         const storedUser = authService.getStoredUser();
         
-        if (token && storedUser) {
-          // Only verify token if we have both token and user
+        if (storedUser) {
+          // Verify authentication with the server
           try {
             const response = await authService.getCurrentUser();
             setUser(response.user);
@@ -34,8 +33,8 @@ export const AuthProvider = ({ children }) => {
                 error.message?.includes('unauthorized') ||
                 error.message?.includes('Session expired') ||
                 error.message?.includes('Access forbidden') ||
-                error.status === 401 || 
-                error.status === 403) {
+                error.response?.status === 401 || 
+                error.response?.status === 403) {
               console.log('Authentication error, logging out:', error.message);
               authService.logout();
               setUser(null);
@@ -68,20 +67,12 @@ export const AuthProvider = ({ children }) => {
   const login = async (email, password) => {
     const response = await authService.login(email, password);
     setUser(response.user);
-    // Store refresh token
-    if (response.user.refreshToken) {
-      localStorage.setItem('refreshToken', response.user.refreshToken);
-    }
     return response;
   };
 
   const register = async (userData) => {
     const response = await authService.register(userData);
     setUser(response.user);
-    // Store refresh token
-    if (response.user.refreshToken) {
-      localStorage.setItem('refreshToken', response.user.refreshToken);
-    }
     return response;
   };
 
@@ -92,34 +83,22 @@ export const AuthProvider = ({ children }) => {
   const verifyOTP = async (email, phone, otp) => {
     const response = await authService.verifyOTP(email, phone, otp);
     setUser(response.user);
-    // Store refresh token
-    if (response.user.refreshToken) {
-      localStorage.setItem('refreshToken', response.user.refreshToken);
-    }
     return response;
   };
 
   const logout = async () => {
     try {
-      // Call logout endpoint to invalidate refresh token
-      const token = localStorage.getItem('token');
-      if (token) {
-        await authService.logout();
-      }
+      await authService.logout();
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // Clear all auth data
-      localStorage.removeItem('token');
-      localStorage.removeItem('refreshToken');
-      localStorage.removeItem('user');
       setUser(null);
     }
   };
 
   const updateUser = (updatedUser) => {
     setUser(updatedUser);
-    localStorage.setItem('user', JSON.stringify(updatedUser));
+    authService.storeUserData(updatedUser);
   };
 
   const value = {
@@ -139,4 +118,4 @@ export const AuthProvider = ({ children }) => {
       {children}
     </AuthContext.Provider>
   );
-}; 
+};
